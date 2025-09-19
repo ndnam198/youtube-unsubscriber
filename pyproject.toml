@@ -1,0 +1,8 @@
+[project]
+name = "youtube-unsubscriber"
+version = "1.0.0"
+description = "A script to programmatically manage YouTube subscriptions."
+dependencies = [
+    "google-api-python-client>=2.0.0",
+    "google-auth-oauthlib>=0.4.1"
+]

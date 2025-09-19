@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual Environment created by uv
+.venv/
+
+# Sensitive Files
+# IMPORTANT: Never commit your secrets or tokens!
+client_secret.json
+token.json
