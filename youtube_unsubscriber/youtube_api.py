@@ -54,7 +54,7 @@ def authenticate_youtube():
         return None
 
 
-def get_all_subscriptions(youtube):
+def get_all_subscriptions(youtube, quota_tracker=None):
     """Fetches all YouTube subscriptions for the authenticated user."""
     all_subscriptions = []
     next_page_token = None
@@ -70,6 +70,10 @@ def get_all_subscriptions(youtube):
             )
             response = request.execute()
             
+            # Record quota usage for each API call
+            if quota_tracker:
+                quota_tracker.record_api_call('subscriptions.list', 1)
+            
             all_subscriptions.extend(response.get("items", []))
             next_page_token = response.get("nextPageToken")
             
@@ -84,11 +88,19 @@ def get_all_subscriptions(youtube):
     return all_subscriptions
 
 
-def unsubscribe_from_channels(youtube, conn, channels):
+def unsubscribe_from_channels(youtube, conn, channels, quota_tracker=None):
     """Unsubscribes from the list of selected channels and updates the database."""
     if not channels:
         logger.info("No channels found to unsubscribe.")
         return
+
+    # Check quota before proceeding
+    if quota_tracker:
+        if not quota_tracker.can_perform_operation('subscriptions.delete', len(channels)):
+            logger.error("Insufficient quota to perform all unsubscriptions.")
+            max_possible = quota_tracker.calculate_max_unsubscriptions()
+            logger.error(f"Maximum unsubscriptions possible today: {max_possible}")
+            return
 
     logger.info(f"--- Found {len(channels)} channels marked for unsubscription ---")
     confirm = input("Are you sure you want to proceed? This action cannot be undone. (yes/no): ").lower()
@@ -97,19 +109,26 @@ def unsubscribe_from_channels(youtube, conn, channels):
         logger.info("Unsubscription process aborted by user.")
         return
 
+    successful_unsubs = 0
     for channel in channels:
         subscription_id = channel["id"]
         channel_title = channel["title"]
         try:
             logger.info(f"Unsubscribing from '{channel_title}'...")
             youtube.subscriptions().delete(id=subscription_id).execute()
+            
+            # Record quota usage for successful unsubscription
+            if quota_tracker:
+                quota_tracker.record_api_call('subscriptions.delete', 1)
+            
             # On success, update the database
             from .database import update_subscription_status_in_db
             update_subscription_status_in_db(conn, subscription_id, "UNSUBSCRIBED")
+            successful_unsubs += 1
             logger.info(f"Successfully unsubscribed from '{channel_title}'.")
         except HttpError as e:
             logger.error(f"Failed to unsubscribe from '{channel_title}': {e}")
             logger.error("This could be due to reaching your daily API quota.")
             break  # Stop the process if an error occurs
 
-    logger.info("Unsubscription process complete.")
+    logger.info(f"Unsubscription process complete. Successfully unsubscribed from {successful_unsubs} channels.")

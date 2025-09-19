@@ -9,7 +9,8 @@ from rich.logging import RichHandler
 from .config import *
 from .database import connect_db, is_db_empty, insert_subscriptions_to_db, print_all_channels_from_db, get_channels_to_unsubscribe_from_db
 from .youtube_api import authenticate_youtube, get_all_subscriptions, unsubscribe_from_channels
-from .ui import print_welcome_banner, print_authentication_error, print_success_panel, print_instructions, print_subscription_report, get_char
+from .ui import print_welcome_banner, print_authentication_error, print_success_panel, print_instructions, print_subscription_report, print_quota_status, get_char
+from .quota_tracker import QuotaTracker
 
 # Initialize Rich console and logging
 console = Console()
@@ -29,6 +30,9 @@ def main():
     # Display welcome banner
     print_welcome_banner()
     
+    # Initialize quota tracker
+    quota_tracker = QuotaTracker()
+    
     # Authenticate with YouTube
     logger.info("Authenticating with YouTube API...")
     youtube = authenticate_youtube()
@@ -43,15 +47,15 @@ def main():
     # Fetch subscriptions if database is empty
     if conn and is_db_empty(conn):
         logger.info("Database is empty. Fetching subscriptions from YouTube...")
-        subscriptions = get_all_subscriptions(youtube)
+        subscriptions = get_all_subscriptions(youtube, quota_tracker)
         if subscriptions:
-            insert_subscriptions_to_db(conn, subscriptions)
+            insert_subscriptions_to_db(conn, subscriptions, quota_tracker)
         else:
             logger.warning("Could not find any subscriptions or an error occurred.")
 
     # Display subscription report
     if conn:
-        print_subscription_report(conn)
+        print_subscription_report(conn, quota_tracker)
         print_success_panel()
 
     print_instructions()
@@ -62,20 +66,22 @@ def main():
         console.print(char)  # Echo the character
 
         if char == "q":
+            print_quota_status(quota_tracker)
+        elif char == "x":
             logger.info("Exiting program.")
             break
         elif char == "p":
             print_all_channels_from_db(conn)
         elif char == "f":
             logger.info("Force refetching all subscriptions...")
-            subscriptions = get_all_subscriptions(youtube)
+            subscriptions = get_all_subscriptions(youtube, quota_tracker)
             if subscriptions:
-                insert_subscriptions_to_db(conn, subscriptions)
+                insert_subscriptions_to_db(conn, subscriptions, quota_tracker)
         elif char == "r":
             channels_to_remove = get_channels_to_unsubscribe_from_db(conn)
-            unsubscribe_from_channels(youtube, conn, channels_to_remove)
+            unsubscribe_from_channels(youtube, conn, channels_to_remove, quota_tracker)
         elif char == "s":
-            print_subscription_report(conn)
+            print_subscription_report(conn, quota_tracker)
         else:
             console.print("[yellow]Unknown command.[/yellow]")
             print_instructions()

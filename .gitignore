@@ -13,3 +13,6 @@ client_secret.json
 token.*
 
 *.env*
+
+# Quota tracking data
+quota_usage.json

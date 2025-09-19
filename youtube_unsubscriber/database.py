@@ -54,13 +54,18 @@ def is_db_empty(conn):
         return count == 0
 
 
-def insert_subscriptions_to_db(conn, subscriptions):
+def insert_subscriptions_to_db(conn, subscriptions, quota_tracker=None):
     """Inserts or updates a list of subscriptions into the database."""
     if not conn:
         logger.warning("Database connection not available. Skipping database insertion.")
         return
 
     logger.info(f"Inserting {len(subscriptions)} subscriptions into the database...")
+    
+    # Record quota usage for fetching subscriptions
+    if quota_tracker:
+        quota_tracker.record_api_call('subscriptions.list', 1)
+    
     with conn.cursor() as cur:
         for sub in subscriptions:
             snippet = sub["snippet"]

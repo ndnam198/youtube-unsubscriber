@@ -25,7 +25,7 @@ def get_char():
     return ch
 
 
-def print_subscription_report(conn):
+def print_subscription_report(conn, quota_tracker=None):
     """Prints a detailed subscription report."""
     if not conn:
         console.print("[yellow]Database connection not available.[/yellow]")
@@ -53,11 +53,16 @@ def print_subscription_report(conn):
         
         status_text += "[" + color + "]" + icon + " " + status + ": " + str(count) + "[/" + color + "]\n"
     
+    # Add quota information if available
+    quota_text = ""
+    if quota_tracker:
+        quota_text = f"\n\n[bold]API Quota Status:[/bold]\n{quota_tracker.get_quota_summary_text()}"
+    
     # Create the report panel
     report_panel = Panel(
         f"[bold blue]Total Subscriptions: {stats['total']}[/bold blue]\n\n"
         f"[bold]Status Breakdown:[/bold]\n"
-        f"{status_text.strip()}",
+        f"{status_text.strip()}{quota_text}",
         title="📊 Subscription Report",
         border_style="blue"
     )
@@ -72,7 +77,8 @@ def print_instructions():
         "[blue]f[/blue] - Force refetch all subscriptions from YouTube and update the database\n"
         "[red]r[/red] - Run the unsubscription process for channels marked 'TO_BE_UNSUBSCRIBED'\n"
         "[magenta]s[/magenta] - Show subscription statistics report\n"
-        "[yellow]q[/yellow] - Quit the program",
+        "[cyan]q[/cyan] - Show quota status and remaining capacity\n"
+        "[yellow]x[/yellow] - Quit the program",
         title="[bold]Commands[/bold]",
         border_style="cyan"
     )
@@ -116,3 +122,53 @@ def print_success_panel():
         border_style="green"
     )
     console.print(success_panel)
+
+
+def print_quota_status(quota_tracker):
+    """Prints detailed quota status information."""
+    if not quota_tracker:
+        console.print("[yellow]Quota tracker not available.[/yellow]")
+        return
+    
+    status = quota_tracker.get_quota_status()
+    max_unsubs = quota_tracker.calculate_max_unsubscriptions()
+    warning_level = quota_tracker.get_quota_warning_level()
+    
+    # Determine panel color based on warning level
+    if warning_level == 'critical':
+        border_color = "red"
+        title_color = "red"
+    elif warning_level == 'warning':
+        border_color = "yellow"
+        title_color = "yellow"
+    else:
+        border_color = "blue"
+        title_color = "blue"
+    
+    # Create detailed quota information
+    quota_info = f"[bold]Daily Quota Usage:[/bold]\n"
+    quota_info += f"Used: {status['used']:,} / {status['limit']:,} units ({status['percentage_used']:.1f}%)\n"
+    quota_info += f"Remaining: {status['remaining']:,} units\n\n"
+    
+    quota_info += f"[bold]Unsubscription Capacity:[/bold]\n"
+    quota_info += f"Max unsubscriptions today: {max_unsubs}\n"
+    quota_info += f"Cost per unsubscription: 50 units\n\n"
+    
+    # Add daily usage breakdown
+    if status['daily_usage']:
+        quota_info += f"[bold]Today's API Calls:[/bold]\n"
+        for operation, count in status['daily_usage'].items():
+            cost = count * (50 if 'delete' in operation else 1)
+            quota_info += f"• {operation}: {count} calls ({cost} units)\n"
+    
+    # Add warning if approaching limits
+    if warning_level in ['warning', 'critical']:
+        quota_info += f"\n[bold {warning_level}]{'⚠️ WARNING' if warning_level == 'warning' else '🚨 CRITICAL'}: "
+        quota_info += f"You are using {status['percentage_used']:.1f}% of your daily quota![/bold {warning_level}]"
+    
+    quota_panel = Panel(
+        quota_info,
+        title=f"[bold {title_color}]📊 API Quota Status[/bold {title_color}]",
+        border_style=border_color
+    )
+    console.print(quota_panel)

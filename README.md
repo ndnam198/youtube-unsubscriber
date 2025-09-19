@@ -211,7 +211,8 @@ youtube_unsubscriber/
 ├── config.py            # Configuration management
 ├── database.py          # Database operations
 ├── youtube_api.py       # YouTube API operations
-└── ui.py               # User interface components
+├── ui.py               # User interface components
+└── quota_tracker.py    # API quota tracking and management
 ```
 
 ### Module Responsibilities
@@ -220,7 +221,33 @@ youtube_unsubscriber/
 - **`database.py`**: Handles all PostgreSQL database operations
 - **`youtube_api.py`**: YouTube API authentication and operations
 - **`ui.py`**: User interface components and Rich console formatting
+- **`quota_tracker.py`**: YouTube API quota tracking and management
 - **`main.py`**: Main application entry point and orchestration
+
+## API Quota Tracking
+
+The application now includes intelligent quota tracking to help you manage your YouTube API usage:
+
+### Features
+- **Real-time quota monitoring** - Tracks your daily API usage
+- **Smart calculations** - Shows exactly how many channels you can unsubscribe from
+- **Warning system** - Alerts when approaching quota limits
+- **Persistent tracking** - Remembers usage across sessions
+
+### Quota Costs
+- **Fetching subscriptions**: 1 unit per request
+- **Unsubscribing from channel**: 50 units per request
+- **Daily limit**: 10,000 units
+
+### Commands
+- **`q`** - Show detailed quota status and remaining capacity
+- **`s`** - Show subscription report with quota information
+
+### Quota Warnings
+- **🟢 OK** (0-50%): Normal usage
+- **🔵 INFO** (50-75%): Moderate usage
+- **🟡 WARNING** (75-90%): High usage - be careful
+- **🔴 CRITICAL** (90%+): Very high usage - consider stopping
 
 ## Stopping the Database
 
