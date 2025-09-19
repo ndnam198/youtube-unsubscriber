@@ -1,0 +1,23 @@
+# Black configuration file
+# https://black.readthedocs.io/en/stable/configuration.html
+
+[build-system]
+requires = ["black>=25.9.0"]
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''

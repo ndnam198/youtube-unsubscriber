@@ -42,11 +42,11 @@ def main():
 
     # Available commands
     commands = {
-        "format": ("uv run black src/", "Format code with Black"),
-        "check": ("uv run black --check src/", "Check code formatting"),
-        "lint": ("uv run pylint src/ --score=y", "Run Pylint"),
+        "format": ("uv run black --config=.black src/", "Format code with Black"),
+        "check": ("uv run black --config=.black --check src/", "Check code formatting"),
+        "lint": ("uv run pylint --rcfile=.pylintrc src/ --score=y", "Run Pylint"),
         "lint-quiet": (
-            "uv run pylint src/ --score=y --disable=C0301",
+            "uv run pylint --rcfile=.pylintrc src/ --score=y --disable=C0301",
             "Run Pylint (quiet)",
         ),
         "all": None,  # Special case

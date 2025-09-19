@@ -22,6 +22,7 @@ You have a free quota of 10,000 units per day. This means you can unsubscribe fr
 ### Step 1: Set Up PostgreSQL Database with Docker
 
 1. **Start PostgreSQL container:**
+
    ```bash
    docker run --name youtube-postgres \
      -e POSTGRES_PASSWORD=password \
@@ -31,10 +32,11 @@ You have a free quota of 10,000 units per day. This means you can unsubscribe fr
    ```
 
 2. **Run automated database setup:**
+
    ```bash
    python setup_database.py
    ```
-   
+
    This script will:
    - Create the database if it doesn't exist
    - Set up the initial subscriptions table
@@ -43,6 +45,7 @@ You have a free quota of 10,000 units per day. This means you can unsubscribe fr
    - Verify the setup is complete
 
 3. **Alternative: Manual setup (if automated setup fails):**
+
    ```bash
    # Copy schema file to container
    docker cp schema/schema.sql youtube-postgres:/schema.sql
@@ -52,6 +55,7 @@ You have a free quota of 10,000 units per day. This means you can unsubscribe fr
    ```
 
 4. **Test the database connection:**
+
    ```bash
    # Connect to the database to verify it's working
    docker exec -it youtube-postgres psql -U postgres -d youtube_subscriptions
@@ -66,7 +70,7 @@ You have a free quota of 10,000 units per day. This means you can unsubscribe fr
 
 ### Step 2: Get Your YouTube API Credentials
 
-1. **Go to the Google Cloud Console:** https://console.cloud.google.com/
+1. **Go to the Google Cloud Console:** <https://console.cloud.google.com/>
 
 2. **Create a new project:**
    - Click the project selector at the top
@@ -100,6 +104,7 @@ You have a free quota of 10,000 units per day. This means you can unsubscribe fr
 ### Step 3: Install Project Dependencies
 
 1. **Create and activate virtual environment:**
+
    ```bash
    # Create virtual environment
    uv venv
@@ -113,6 +118,7 @@ You have a free quota of 10,000 units per day. This means you can unsubscribe fr
    ```
 
 2. **Install dependencies:**
+
    ```bash
    uv pip install -e .
    ```
@@ -142,6 +148,7 @@ DB_PORT=5432
 ## How to Run the Script
 
 1. **Activate the virtual environment:**
+
    ```bash
    source .venv/bin/activate  # macOS/Linux
    # or
@@ -149,6 +156,7 @@ DB_PORT=5432
    ```
 
 2. **Run the script:**
+
    ```bash
    # Option 1: Using the run script
    python run.py
@@ -161,6 +169,7 @@ DB_PORT=5432
    ```
 
 3. **Fetch channel metadata (optional but recommended):**
+
    ```bash
    # Fetch detailed metadata for all channels
    python fetch_channel_metadata.py
@@ -173,7 +182,7 @@ DB_PORT=5432
    - Grant permission to manage your YouTube account
    - Close the browser tab after approval
 
-4. **Initial Setup:**
+5. **Initial Setup:**
    - The script will automatically fetch all your subscriptions
    - Data will be stored in the PostgreSQL database
    - You'll see a message when fetching is complete
@@ -187,7 +196,7 @@ The script runs in an interactive mode with the following commands:
 - **`r`** - Run unsubscription process for channels marked as 'TO_BE_UNSUBSCRIBED'
 - **`q`** - Quit the program
 
-### Workflow:
+### Workflow
 
 1. **Review subscriptions:** Use `p` to see all your subscriptions
 2. **Mark for removal:** Use a database client (like pgAdmin, DBeaver, or psql) to change the `status` column to `TO_BE_UNSUBSCRIBED` for channels you want to remove
@@ -196,6 +205,7 @@ The script runs in an interactive mode with the following commands:
 ### Database Schema
 
 The `subscriptions` table includes:
+
 - `id` - Primary key
 - `youtube_channel_id` - YouTube channel ID
 - `youtube_subscription_id` - Subscription ID (used for unsubscribing)
@@ -207,14 +217,17 @@ The `subscriptions` table includes:
 ## Troubleshooting
 
 ### Database Connection Issues
+
 - Ensure Docker container is running: `docker ps`
 - Check if PostgreSQL is accessible: `docker exec -it youtube-postgres psql -U postgres -d youtube_subscriptions`
 
 ### API Quota Exceeded
+
 - Wait 24 hours for quota reset
 - Check your quota usage in Google Cloud Console
 
 ### Authentication Issues
+
 - Delete `token.pickle` and re-run the script
 - Ensure `client_secret.json` is in the correct location
 
@@ -222,7 +235,7 @@ The `subscriptions` table includes:
 
 The project has been refactored into a clean, modular structure:
 
-```
+```bash
 youtube_unsubscriber/
 ├── __init__.py          # Package initialization
 ├── main.py              # Main application logic
@@ -249,21 +262,25 @@ youtube_unsubscriber/
 The application now includes intelligent quota tracking to help you manage your YouTube API usage:
 
 ### Features
+
 - **Real-time quota monitoring** - Tracks your daily API usage
 - **Smart calculations** - Shows exactly how many channels you can unsubscribe from
 - **Warning system** - Alerts when approaching quota limits
 - **Persistent tracking** - Remembers usage across sessions
 
 ### Quota Costs
+
 - **Fetching subscriptions**: 1 unit per request
 - **Unsubscribing from channel**: 50 units per request
 - **Daily limit**: 10,000 units
 
 ### Commands
+
 - **`q`** - Show detailed quota status and remaining capacity
 - **`s`** - Show subscription report with quota information
 
 ### Quota Warnings
+
 - **🟢 OK** (0-50%): Normal usage
 - **🔵 INFO** (50-75%): Moderate usage
 - **🟡 WARNING** (75-90%): High usage - be careful
@@ -276,6 +293,7 @@ The application now fetches and stores detailed channel metadata to help you mak
 ### Available Information
 
 #### ✅ **Retrievable Data:**
+
 - **`subscriber_count`** - Number of subscribers
 - **`video_count`** - Total videos uploaded
 - **`view_count`** - Total views across all videos
@@ -287,10 +305,11 @@ The application now fetches and stores detailed channel metadata to help you mak
 - **`topic_ids`** - YouTube topic categories (e.g., Education, Gaming, Music)
 
 #### ❌ **Not Available:**
+
 - **`last_action_time`** - YouTube API doesn't provide last activity time
 - **Custom content tags** - Only YouTube's topic IDs are available, not descriptive tags
 
-### Database Schema
+### Database Schema Changes
 
 The new `channels` table stores this metadata with a foreign key relationship to the `subscriptions` table:
 
@@ -312,36 +331,59 @@ The new `channels` table stores this metadata with a foreign key relationship to
 ## Available Scripts
 
 ### Main Application
+
 - **`run.py`** - Main application entry point
 - **`python -m src.main`** - Run as module
 - **`youtube-unsubscriber`** - Run as installed command
 
 ### Database Management
+
 - **`setup_database.py`** - Automated database setup
 - **`schema/schema.sql`** - Complete database schema (subscriptions + channels tables)
 
 ### Channel Metadata
+
 - **`fetch_channel_metadata.py`** - Standalone script to fetch channel metadata
 
 ### Development Tools
+
 - **`scripts/lint.py`** - Development tools runner (format, lint, check)
+- **`scripts/setup-dev.py`** - Complete development environment setup
+- **`.black`** - Black code formatter configuration
+- **`pylintrc`** - Pylint code quality checker configuration
 
 ## Development
 
-### Prerequisites
+### Prerequisites for Development
+
 - Python 3.9+
 - uv package manager
 
 ### Setup Development Environment
+
+#### Quick Setup (Recommended)
+
+```bash
+# Complete development environment setup
+python scripts/setup-dev.py
+```
+
+#### Manual Setup
+
 ```bash
 # Install dependencies including dev tools
 uv sync --dev
 
-# Or install dev dependencies separately
-uv add --dev black pylint
+# Install pre-commit hooks
+uv run pre-commit install
+
+# Test configuration
+uv run black --config=.black --check src/
+uv run pylint --rcfile=.pylintrc --version
 ```
 
-### Development Tools
+### Development Tools Runner
+
 ```bash
 # Format code
 python scripts/lint.py format
@@ -355,17 +397,23 @@ python scripts/lint.py lint
 # Run all checks
 python scripts/lint.py all
 
-# Or use uv directly
-uv run black src/
-uv run pylint src/
+# Or use uv directly with config files
+uv run black --config=.black src/
+uv run pylint --rcfile=pylintrc src/
+
+# Pre-commit hooks (runs automatically on git commit)
+uv run pre-commit run --all-files
 ```
 
 ### Code Quality
-- **Black**: Code formatting (line length: 88)
-- **Pylint**: Code analysis and quality checks
-- **Configuration**: Both tools configured in `pyproject.toml`
+
+- **Black**: Code formatting (line length: 88) - configured in `.black`
+- **Pylint**: Code analysis and quality checks - configured in `.pylintrc`
+- **Pre-commit**: Automatic formatting and linting on git commit
+- **Configuration**: Separate config files for better isolation
 
 ### Usage Examples
+
 ```bash
 # Complete setup from scratch
 python setup_database.py
