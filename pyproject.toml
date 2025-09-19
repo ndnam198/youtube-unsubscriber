@@ -1,14 +1,14 @@
 [project]
-description = "A script to programmatically manage YouTube subscriptions."requires-python = ">=3.9"
-
+description = "A script to programmatically manage YouTube subscriptions."
+requires-python = ">=3.9"
 name = "youtube-unsubscriber"
 version = "1.0.0"
 dependencies = [
-    "google-api-python-client>=2.0.0",
-    "google-auth-oauthlib>=0.4.1",
-    "psycopg2-binary>=2.9.3",
-    "python-dotenv>=1.0.0",
-    "rich>=13.0.0",
+  "google-api-python-client>=2.0.0",
+  "google-auth-oauthlib>=0.4.1",
+  "psycopg2-binary>=2.9.3",
+  "python-dotenv>=1.0.0",
+  "rich>=13.0.0",
 ]
 
 [project.scripts]
@@ -41,11 +41,11 @@ extend-exclude = '''
 
 [tool.pylint.messages_control]
 disable = [
-    "C0114", # missing-module-docstring
-    "C0116", # missing-function-docstring
-    "R0903", # too-few-public-methods
-    "R0913", # too-many-arguments
-    "W0613", # unused-argument
+  "C0114", # missing-module-docstring
+  "C0116", # missing-function-docstring
+  "R0903", # too-few-public-methods
+  "R0913", # too-many-arguments
+  "W0613", # unused-argument
 ]
 
 [tool.pylint.format]
