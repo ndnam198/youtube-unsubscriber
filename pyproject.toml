@@ -9,3 +9,10 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "rich>=13.0.0",
 ]
+
+[project.scripts]
+youtube-unsubscriber = "youtube_unsubscriber.main:main"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"

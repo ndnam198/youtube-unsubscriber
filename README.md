@@ -138,7 +138,14 @@ DB_PORT=5432
 
 2. **Run the script:**
    ```bash
-   python main.py
+   # Option 1: Using the run script
+   python run.py
+   
+   # Option 2: As a module
+   python -m youtube_unsubscriber.main
+   
+   # Option 3: After installation (if installed with pip)
+   youtube-unsubscriber
    ```
 
 3. **First-time Authorization:**
@@ -192,6 +199,28 @@ The `subscriptions` table includes:
 ### Authentication Issues
 - Delete `token.pickle` and re-run the script
 - Ensure `client_secret.json` is in the correct location
+
+## Package Structure
+
+The project has been refactored into a clean, modular structure:
+
+```
+youtube_unsubscriber/
+├── __init__.py          # Package initialization
+├── main.py              # Main application logic
+├── config.py            # Configuration management
+├── database.py          # Database operations
+├── youtube_api.py       # YouTube API operations
+└── ui.py               # User interface components
+```
+
+### Module Responsibilities
+
+- **`config.py`**: Manages all configuration settings and environment variables
+- **`database.py`**: Handles all PostgreSQL database operations
+- **`youtube_api.py`**: YouTube API authentication and operations
+- **`ui.py`**: User interface components and Rich console formatting
+- **`main.py`**: Main application entry point and orchestration
 
 ## Stopping the Database
 
