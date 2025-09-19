@@ -2,7 +2,7 @@
 -- This file contains the complete database schema for the YouTube Unsubscriber application
 
 -- Create subscription status enum
-CREATE TYPE subscription_status AS ENUM ('SUBSCRIBED', 'TO_BE_UNSUBSCRIBED', 'UNSUBSCRIBED');
+CREATE TYPE subscription_status AS ENUM ('SUBSCRIBED', 'TO_BE_UNSUBSCRIBED', 'UNSUBSCRIBED', 'KEPT');
 
 -- Create subscriptions table
 CREATE TABLE subscriptions (

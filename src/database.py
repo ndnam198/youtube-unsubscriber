@@ -468,7 +468,7 @@ def search_channels_with_metadata(conn, search_term, count_only=False):
 
 
 def get_subscriptions_sorted_by_subscriber_count(conn):
-    """Get all subscriptions sorted by subscriber count (lowest first)."""
+    """Get all SUBSCRIBED subscriptions sorted by subscriber count (lowest first). Excludes KEPT, TO_BE_UNSUBSCRIBED, and UNSUBSCRIBED channels."""
     if not conn:
         return []
 
@@ -495,6 +495,7 @@ def get_subscriptions_sorted_by_subscriber_count(conn):
             c.topic_ids
         FROM subscriptions s
         LEFT JOIN channels c ON s.youtube_channel_id = c.youtube_channel_id
+        WHERE s.status = 'SUBSCRIBED'
         ORDER BY COALESCE(c.subscriber_count, 0) ASC, s.channel_name ASC
         """
 

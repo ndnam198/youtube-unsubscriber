@@ -118,7 +118,7 @@ def handle_user_command(char, youtube, conn, quota_tracker):
         interactive_subscription_decision(conn, youtube, quota_tracker)
     else:
         console.print("[yellow]Unknown command.[/yellow]")
-        print_instructions()
+        print_instructions(conn)
     return True
 
 
@@ -164,7 +164,7 @@ def main():
         print_subscription_report(conn, quota_tracker)
         print_success_panel()
 
-    print_instructions()
+    print_instructions(conn)
 
     while True:
         console.print("\n[bold cyan]Enter a command:[/bold cyan] ", end="")

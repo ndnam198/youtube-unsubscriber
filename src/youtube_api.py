@@ -144,9 +144,24 @@ def unsubscribe_from_channels(youtube, conn, channels, quota_tracker=None):
             successful_unsubs += 1
             logger.info(f"Successfully unsubscribed from '{channel_title}'.")
         except HttpError as e:
-            logger.error(f"Failed to unsubscribe from '{channel_title}': {e}")
-            logger.error("This could be due to reaching your daily API quota.")
-            break  # Stop the process if an error occurs
+            # Handle 404 error as success (subscription already unsubscribed)
+            if e.resp.status == 404:
+                logger.info(
+                    f"'{channel_title}' was already unsubscribed (404 error - treating as success)"
+                )
+                # Still record quota usage since we attempted the operation
+                if quota_tracker:
+                    quota_tracker.record_api_call("subscriptions.delete", 1)
+                # Update database status as unsubscribed
+                update_subscription_status_in_db(conn, subscription_id, "UNSUBSCRIBED")
+                successful_unsubs += 1
+                logger.info(
+                    f"Successfully processed '{channel_title}' (was already unsubscribed)."
+                )
+            else:
+                logger.error(f"Failed to unsubscribe from '{channel_title}': {e}")
+                logger.error("This could be due to reaching your daily API quota.")
+                break  # Stop the process if an error occurs
 
     logger.info(
         f"Unsubscription process complete. Successfully unsubscribed from {successful_unsubs} channels."
@@ -172,5 +187,15 @@ def unsubscribe_from_channel(youtube, subscription_id, quota_tracker=None):
         return True
 
     except HttpError as e:
-        logger.error(f"Failed to unsubscribe from channel: {e}")
-        return False
+        # Handle 404 error as success (subscription already unsubscribed)
+        if e.resp.status == 404:
+            logger.info(
+                "Subscription already unsubscribed (404 error - treating as success)"
+            )
+            # Still record quota usage since we attempted the operation
+            if quota_tracker:
+                quota_tracker.record_api_call("subscriptions.delete", 1)
+            return True
+        else:
+            logger.error(f"Failed to unsubscribe from channel: {e}")
+            return False

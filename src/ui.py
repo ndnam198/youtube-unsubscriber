@@ -48,7 +48,7 @@ def print_subscription_report(conn, quota_tracker=None):
 
     # Create status breakdown text
     status_text = ""
-    for status in ["SUBSCRIBED", "TO_BE_UNSUBSCRIBED", "UNSUBSCRIBED"]:
+    for status in ["SUBSCRIBED", "TO_BE_UNSUBSCRIBED", "UNSUBSCRIBED", "KEPT"]:
         count = stats["by_status"].get(status, 0)
         if status == "SUBSCRIBED":
             color = "green"
@@ -59,6 +59,9 @@ def print_subscription_report(conn, quota_tracker=None):
         elif status == "UNSUBSCRIBED":
             color = "red"
             icon = "❌"
+        elif status == "KEPT":
+            color = "cyan"
+            icon = "🔒"
         else:
             # Default fallback
             color = "white"
@@ -94,12 +97,29 @@ def print_subscription_report(conn, quota_tracker=None):
     console.print(report_panel)
 
 
-def print_instructions():
+def print_instructions(conn=None):
     """Prints the available commands."""
+    # Get count of channels waiting to be unsubscribed
+    waiting_count = 0
+    if conn:
+        try:
+            from src.database import get_subscription_stats
+
+            stats = get_subscription_stats(conn)
+            if stats:
+                waiting_count = stats["by_status"].get("TO_BE_UNSUBSCRIBED", 0)
+        except Exception:
+            waiting_count = 0
+
+    # Build the r command text with count
+    r_command = f"[red]r[/red] - Run the unsubscription process for channels marked 'TO_BE_UNSUBSCRIBED'"
+    if waiting_count > 0:
+        r_command += f" ({waiting_count} waiting)"
+
     commands_panel = Panel(
         "[bold cyan]Available Commands:[/bold cyan]\n\n"
         "[blue]f[/blue] - Force refetch all subscriptions from YouTube and update the database\n"
-        "[red]r[/red] - Run the unsubscription process for channels marked 'TO_BE_UNSUBSCRIBED'\n"
+        f"{r_command}\n"
         "[magenta]s[/magenta] - Show subscription statistics report\n"
         "[cyan]q[/cyan] - Show quota status and remaining capacity\n"
         "[green]e[/green] - Export all channels with metadata to file\n"
@@ -333,6 +353,37 @@ def interactive_search_channels(conn):
         console.print(f"[red]❌ Error searching channels: {e}[/red]")
 
 
+def apply_subscription_filter(subscriptions, filter_choice):
+    """Apply filtering to subscriptions based on user choice."""
+    if filter_choice == "n":
+        return subscriptions
+
+    filtered = []
+    for sub in subscriptions:
+        subscriber_count = sub.get("subscriber_count", 0)
+        video_count = sub.get("video_count", 0)
+        view_count = sub.get("view_count", 0)
+
+        if filter_choice == "1" and subscriber_count > 10000:
+            continue
+        elif filter_choice == "2" and subscriber_count > 1000:
+            continue
+        elif filter_choice == "3" and subscriber_count > 100000:
+            continue
+        elif filter_choice == "4" and video_count > 1000:
+            continue
+        elif filter_choice == "5" and video_count > 100:
+            continue
+        elif filter_choice == "6" and view_count > 1000000:
+            continue
+        elif filter_choice == "7" and view_count > 10000000:
+            continue
+
+        filtered.append(sub)
+
+    return filtered
+
+
 def interactive_subscription_decision(conn, youtube, quota_tracker):
     """Interactive decision making for each subscription, sorted by subscriber count."""
     if not conn:
@@ -346,27 +397,70 @@ def interactive_subscription_decision(conn, youtube, quota_tracker):
         subscriptions = get_subscriptions_sorted_by_subscriber_count(conn)
 
         if not subscriptions:
-            console.print("[yellow]No subscriptions found in database.[/yellow]")
+            console.print("[yellow]No SUBSCRIBED channels found in database.[/yellow]")
+            console.print(
+                "[dim]All channels may have been unsubscribed or marked for unsubscription.[/dim]"
+            )
             return
 
         console.print(f"\n[bold cyan]🎯 Interactive Subscription Decision[/bold cyan]")
         console.print(
-            f"[dim]Reviewing {len(subscriptions)} subscriptions (sorted by subscriber count)[/dim]"
+            f"[dim]Reviewing {len(subscriptions)} SUBSCRIBED channels (fresh data, sorted by subscriber count)[/dim]"
+        )
+
+        # Show filtering options
+        console.print("\n[bold]Filtering Options:[/bold]")
+        console.print("[cyan]1[/cyan] - Skip channels with >10K subscribers")
+        console.print("[cyan]2[/cyan] - Skip channels with >1K subscribers")
+        console.print("[cyan]3[/cyan] - Skip channels with >100K subscribers")
+        console.print("[cyan]4[/cyan] - Skip channels with videos >1000")
+        console.print("[cyan]5[/cyan] - Skip channels with videos >100")
+        console.print("[cyan]6[/cyan] - Skip channels with views >1M")
+        console.print("[cyan]7[/cyan] - Skip channels with views >10M")
+        console.print("[cyan]n[/cyan] - No filtering (review all)")
+
+        filter_choice = console.input("\n[bold]Choose filter (1-7, n):[/bold] ").strip()
+
+        # Apply filtering
+        filtered_subscriptions = apply_subscription_filter(subscriptions, filter_choice)
+
+        if not filtered_subscriptions:
+            console.print(
+                "[yellow]No subscriptions match the filter criteria.[/yellow]"
+            )
+            return
+
+        console.print(
+            f"\n[green]Filtered to {len(filtered_subscriptions)} subscriptions[/green]"
         )
         console.print("\n[bold]Commands:[/bold]")
-        console.print("[green]y[/green] - Unsubscribe from this channel")
+        console.print("[green]y[/green] - Mark for unsubscription (use 'r' to execute)")
         console.print("[blue]s[/blue] - Skip (keep subscription)")
+        console.print(
+            "[cyan]k[/cyan] - Mark as KEPT (permanently keep, won't review again)"
+        )
         console.print("[purple]o[/purple] - Open channel in browser")
+        console.print(
+            "[bold green]yy[/bold green] - Mark for unsubscription and skip next 5 similar channels"
+        )
+        console.print(
+            "[bold blue]ss[/bold blue] - Skip this and next 5 similar channels"
+        )
+        console.print(
+            "[bold red]ya[/bold red] - Mark ALL remaining channels for unsubscription"
+        )
+        console.print("[bold yellow]sa[/bold yellow] - Skip ALL remaining channels")
         console.print("[yellow]q[/yellow] - Quit decision process")
         console.print("\n" + "=" * 80)
 
         unsubscribed_count = 0
         skipped_count = 0
+        auto_skip_count = 0
 
-        for i, subscription in enumerate(subscriptions, 1):
+        for i, subscription in enumerate(filtered_subscriptions, 1):
             # Display subscription details
             console.print(
-                f"\n[bold cyan]📺 Channel {i}/{len(subscriptions)}[/bold cyan]"
+                f"\n[bold cyan]📺 Channel {i}/{len(filtered_subscriptions)}[/bold cyan]"
             )
             console.print("=" * 60)
 
@@ -408,45 +502,130 @@ def interactive_subscription_decision(conn, youtube, quota_tracker):
                 console.print(char)
 
                 if char.lower() == "y":
-                    # Unsubscribe
-                    console.print("[red]Unsubscribing...[/red]")
+                    # Mark for unsubscription (API call will happen later with 'r' command)
+                    console.print(
+                        f"[red]Marking '{subscription['channel_title']}' for unsubscription...[/red]"
+                    )
 
-                    # Update database status first
+                    # Update database status to TO_BE_UNSUBSCRIBED
                     update_subscription_status_in_db(
                         conn,
                         subscription["youtube_subscription_id"],
                         "TO_BE_UNSUBSCRIBED",
                     )
 
-                    # Actually unsubscribe via API
-                    from src.youtube_api import unsubscribe_from_channel
-
-                    success = unsubscribe_from_channel(
-                        youtube, subscription["youtube_subscription_id"], quota_tracker
+                    console.print(
+                        "[yellow]✅ Marked for unsubscription (use 'r' to execute)[/yellow]"
                     )
-
-                    if success:
-                        update_subscription_status_in_db(
-                            conn,
-                            subscription["youtube_subscription_id"],
-                            "UNSUBSCRIBED",
-                        )
-                        console.print("[green]✅ Unsubscribed successfully![/green]")
-                        unsubscribed_count += 1
-                    else:
-                        # Revert database status if API call failed
-                        update_subscription_status_in_db(
-                            conn, subscription["youtube_subscription_id"], "SUBSCRIBED"
-                        )
-                        console.print(
-                            "[red]❌ Failed to unsubscribe. Status reverted.[/red]"
-                        )
+                    unsubscribed_count += 1
                     break
 
                 elif char.lower() == "s":
                     # Skip (keep subscription)
                     console.print("[blue]Skipped - keeping subscription[/blue]")
                     skipped_count += 1
+                    break
+
+                elif char.lower() == "k":
+                    # Mark as KEPT (permanently keep, won't review again)
+                    console.print("[cyan]Marking as KEPT - won't review again[/cyan]")
+                    from src.database import update_subscription_status_in_db
+
+                    update_subscription_status_in_db(
+                        conn, subscription["youtube_subscription_id"], "KEPT"
+                    )
+                    skipped_count += 1
+                    break
+
+                elif char.lower() == "yy":
+                    # Mark for unsubscription and skip next 5 similar channels
+                    console.print(
+                        "[red]Marking for unsubscription and auto-skipping next 5 similar channels...[/red]"
+                    )
+
+                    # Mark current channel for unsubscription
+                    update_subscription_status_in_db(
+                        conn,
+                        subscription["youtube_subscription_id"],
+                        "TO_BE_UNSUBSCRIBED",
+                    )
+                    console.print(
+                        "[yellow]✅ Marked for unsubscription (use 'r' to execute)[/yellow]"
+                    )
+                    unsubscribed_count += 1
+
+                    # Auto-skip next 5 channels with similar subscriber count
+                    auto_skip_count += auto_skip_similar_channels(
+                        filtered_subscriptions,
+                        i,
+                        subscription["subscriber_count"],
+                        5,
+                    )
+                    break
+
+                elif char.lower() == "ss":
+                    # Skip this and next 5 similar channels
+                    console.print(
+                        "[blue]Skipping this and next 5 similar channels...[/blue]"
+                    )
+                    skipped_count += 1
+                    # Auto-skip next 5 channels with similar subscriber count
+                    auto_skip_count += auto_skip_similar_channels(
+                        filtered_subscriptions, i, subscription["subscriber_count"], 5
+                    )
+                    break
+
+                elif char.lower() == "ya":
+                    # Mark ALL remaining channels for unsubscription
+                    console.print(
+                        "[bold red]Marking ALL remaining channels for unsubscription...[/bold red]"
+                    )
+                    confirm = (
+                        console.input(
+                            "Are you sure? This will mark ALL remaining channels for unsubscription! (yes/no): "
+                        )
+                        .strip()
+                        .lower()
+                    )
+                    if confirm == "yes":
+                        # Mark current channel for unsubscription
+                        update_subscription_status_in_db(
+                            conn,
+                            subscription["youtube_subscription_id"],
+                            "TO_BE_UNSUBSCRIBED",
+                        )
+                        unsubscribed_count += 1
+
+                        # Mark all remaining channels for unsubscription
+                        remaining_count = 0
+                        for remaining_sub in filtered_subscriptions[i:]:
+                            update_subscription_status_in_db(
+                                conn,
+                                remaining_sub["youtube_subscription_id"],
+                                "TO_BE_UNSUBSCRIBED",
+                            )
+                            remaining_count += 1
+
+                        unsubscribed_count += remaining_count
+                        console.print(
+                            f"[green]✅ Marked {remaining_count + 1} channels for unsubscription (use 'r' to execute)![/green]"
+                        )
+                        return
+                    else:
+                        console.print("[yellow]Batch mark cancelled.[/yellow]")
+                        console.print("\n[bold]Decision:[/bold] ", end="")
+                        continue
+
+                elif char.lower() == "sa":
+                    # Skip ALL remaining channels
+                    console.print(
+                        "[bold yellow]Skipping ALL remaining channels...[/bold yellow]"
+                    )
+                    remaining_count = len(filtered_subscriptions) - i
+                    skipped_count += remaining_count
+                    console.print(
+                        f"[blue]Skipped {remaining_count} remaining channels[/blue]"
+                    )
                     break
 
                 elif char.lower() == "o":
@@ -476,7 +655,7 @@ def interactive_subscription_decision(conn, youtube, quota_tracker):
 
                 else:
                     console.print(
-                        "[yellow]Invalid choice. Use y/s/o/q:[/yellow] ", end=""
+                        "[yellow]Invalid choice. Use y/s/k/o/q:[/yellow] ", end=""
                     )
                     continue
 
@@ -484,8 +663,33 @@ def interactive_subscription_decision(conn, youtube, quota_tracker):
         console.print(f"\n[bold green]🎉 Decision process completed![/bold green]")
         console.print(f"[green]Unsubscribed: {unsubscribed_count} channels[/green]")
         console.print(f"[blue]Skipped: {skipped_count} channels[/blue]")
-        console.print(f"[dim]Total processed: {len(subscriptions)} channels[/dim]")
+        if auto_skip_count > 0:
+            console.print(
+                f"[dim]Auto-skipped: {auto_skip_count} similar channels[/dim]"
+            )
+        console.print(
+            f"[dim]Total processed: {len(filtered_subscriptions)} channels[/dim]"
+        )
 
     except Exception as e:
         logger.error(f"Error in interactive subscription decision: {e}")
         console.print(f"[red]❌ Error in decision process: {e}[/red]")
+
+
+def auto_skip_similar_channels(subscriptions, current_index, subscriber_count, count):
+    """Auto-skip channels with similar subscriber count."""
+    skipped = 0
+    threshold = subscriber_count * 0.5  # 50% similarity threshold
+
+    for i in range(current_index, min(current_index + count, len(subscriptions))):
+        if i < len(subscriptions):
+            sub = subscriptions[i]
+            if abs(sub.get("subscriber_count", 0) - subscriber_count) <= threshold:
+                console.print(
+                    f"[dim]Auto-skipping: {sub['channel_title']} ({sub.get('subscriber_count', 0):,} subs)[/dim]"
+                )
+                skipped += 1
+            else:
+                break
+
+    return skipped
