@@ -10,9 +10,26 @@ from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from rich.console import Console
+from rich.logging import RichHandler
+from rich.panel import Panel
+from rich.text import Text
+import logging
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Initialize Rich console and logging
+console = Console()
+
+# Setup logging with Rich
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(message)s",
+    datefmt="[%X]",
+    handlers=[RichHandler(console=console, rich_tracebacks=True)]
+)
+logger = logging.getLogger("youtube-unsubscriber")
 
 # --- CONFIGURATION ---
 CLIENT_SECRETS_FILE = os.getenv("CLIENT_SECRETS_FILE", "client_secret.json")
@@ -32,6 +49,7 @@ DB_PORT = os.getenv("DB_PORT", "5432")
 def connect_db():
     """Connect to the PostgreSQL database and return the connection object."""
     try:
+        logger.info("Connecting to PostgreSQL database...")
         conn = psycopg2.connect(
             dbname=DB_NAME,
             user=DB_USER,
@@ -39,13 +57,24 @@ def connect_db():
             host=DB_HOST,
             port=DB_PORT,
         )
-        print("Successfully connected to the database.")
+        logger.info("✅ Successfully connected to the database.")
         return conn
     except psycopg2.OperationalError as e:
-        print(f"Warning: Could not connect to the database. {e}")
-        print("Please ensure PostgreSQL is running and the connection details are correct.")
-        print("The script will continue without database functionality.")
-        return None
+        error_panel = Panel(
+            f"[red]❌ Database Connection Failed[/red]\n\n"
+            f"[yellow]Error:[/yellow] {e}\n\n"
+            f"[blue]Please ensure:[/blue]\n"
+            f"• PostgreSQL is running\n"
+            f"• Database '{DB_NAME}' exists\n"
+            f"• User '{DB_USER}' has proper permissions\n"
+            f"• Connection details in .env are correct\n\n"
+            f"[dim]Run: docker run --name youtube-postgres -e POSTGRES_PASSWORD=password -e POSTGRES_DB=youtube_subscriptions -p 5432:5432 -d postgres:15[/dim]",
+            title="[bold red]Database Error[/bold red]",
+            border_style="red"
+        )
+        console.print(error_panel)
+        logger.error("Database connection failed. Exiting program.")
+        sys.exit(1)
 
 
 def get_char():
@@ -66,19 +95,20 @@ def authenticate_youtube():
 
     # Check if a token file already exists from a previous run
     if os.path.exists(TOKEN_FILE):
+        logger.info("Loading existing credentials...")
         with open(TOKEN_FILE, "rb") as token:
             credentials = pickle.load(token)
 
     # If there are no (valid) credentials available, let the user log in.
     if not credentials or not credentials.valid:
         if credentials and credentials.expired and credentials.refresh_token:
-            print("Refreshing access token...")
+            logger.info("Refreshing access token...")
             credentials.refresh(Request())
         else:
-            print("Fetching new credentials...")
+            logger.info("Fetching new credentials...")
             if not os.path.exists(CLIENT_SECRETS_FILE):
-                print(f"Error: The credentials file '{CLIENT_SECRETS_FILE}' was not found.")
-                print("Please follow the setup instructions in README.md to download it.")
+                logger.error(f"The credentials file '{CLIENT_SECRETS_FILE}' was not found.")
+                logger.error("Please follow the setup instructions in README.md to download it.")
                 return None
                 
             flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS_FILE, SCOPES)
@@ -87,14 +117,14 @@ def authenticate_youtube():
         # Save the credentials for the next run
         with open(TOKEN_FILE, "wb") as token:
             pickle.dump(credentials, token)
-            print(f"Credentials saved to '{TOKEN_FILE}' for future use.")
+            logger.info(f"Credentials saved to '{TOKEN_FILE}' for future use.")
 
     try:
         youtube = build(API_SERVICE_NAME, API_VERSION, credentials=credentials)
-        print("Authentication successful.")
+        logger.info("✅ Authentication successful.")
         return youtube
     except HttpError as e:
-        print(f"An error occurred during API build: {e}")
+        logger.error(f"An error occurred during API build: {e}")
         return None
 
 
@@ -102,7 +132,7 @@ def get_all_subscriptions(youtube):
     """Fetches all YouTube subscriptions for the authenticated user."""
     all_subscriptions = []
     next_page_token = None
-    print("\nFetching all your subscriptions... (this may take a moment)")
+    logger.info("Fetching all your subscriptions... (this may take a moment)")
 
     while True:
         try:
@@ -117,12 +147,12 @@ def get_all_subscriptions(youtube):
             all_subscriptions.extend(response.get("items", []))
             next_page_token = response.get("nextPageToken")
             
-            print(f"Found {len(all_subscriptions)} subscriptions so far...")
+            logger.info(f"Found {len(all_subscriptions)} subscriptions so far...")
 
             if not next_page_token:
                 break
         except HttpError as e:
-            print(f"An error occurred while fetching subscriptions: {e}")
+            logger.error(f"An error occurred while fetching subscriptions: {e}")
             return []
 
     return all_subscriptions
@@ -167,6 +197,64 @@ def is_db_empty(conn):
         cur.execute("SELECT COUNT(*) FROM subscriptions;")
         count = cur.fetchone()[0]
         return count == 0
+
+
+def get_subscription_stats(conn):
+    """Gets subscription statistics from the database."""
+    if not conn:
+        return None
+    
+    with conn.cursor() as cur:
+        # Get total count
+        cur.execute("SELECT COUNT(*) FROM subscriptions;")
+        total = cur.fetchone()[0]
+        
+        # Get count by status
+        cur.execute("SELECT status, COUNT(*) FROM subscriptions GROUP BY status ORDER BY status;")
+        status_counts = dict(cur.fetchall())
+        
+        return {
+            'total': total,
+            'by_status': status_counts
+        }
+
+
+def print_subscription_report(conn):
+    """Prints a detailed subscription report."""
+    if not conn:
+        console.print("[yellow]Database connection not available.[/yellow]")
+        return
+    
+    stats = get_subscription_stats(conn)
+    if not stats:
+        console.print("[yellow]No subscription data available.[/yellow]")
+        return
+    
+    # Create status breakdown text
+    status_text = ""
+    for status in ['SUBSCRIBED', 'TO_BE_UNSUBSCRIBED', 'UNSUBSCRIBED']:
+        count = stats['by_status'].get(status, 0)
+        if status == 'SUBSCRIBED':
+            color = "green"
+            icon = "✅"
+        elif status == 'TO_BE_UNSUBSCRIBED':
+            color = "yellow"
+            icon = "⚠️"
+        elif status == 'UNSUBSCRIBED':
+            color = "red"
+            icon = "❌"
+        
+        status_text += "[" + color + "]" + icon + " " + status + ": " + str(count) + "[/" + color + "]\n"
+    
+    # Create the report panel
+    report_panel = Panel(
+        f"[bold blue]Total Subscriptions: {stats['total']}[/bold blue]\n\n"
+        f"[bold]Status Breakdown:[/bold]\n"
+        f"{status_text.strip()}",
+        title="📊 Subscription Report",
+        border_style="blue"
+    )
+    console.print(report_panel)
 
 
 def print_all_channels_from_db(conn):
@@ -246,62 +334,103 @@ def unsubscribe_from_channels(youtube, conn, channels):
 
 def print_instructions():
     """Prints the available commands."""
-    print("\nAvailable commands:")
-    print("  p - Print all subscriptions from the database")
-    print("  f - Force refetch all subscriptions from YouTube and update the database")
-    print("  r - Run the unsubscription process for channels marked 'TO_BE_UNSUBSCRIBED'")
-    print("  q - Quit the program")
+    commands_panel = Panel(
+        "[bold cyan]Available Commands:[/bold cyan]\n\n"
+        "[green]p[/green] - Print all subscriptions from the database\n"
+        "[blue]f[/blue] - Force refetch all subscriptions from YouTube and update the database\n"
+        "[red]r[/red] - Run the unsubscription process for channels marked 'TO_BE_UNSUBSCRIBED'\n"
+        "[magenta]s[/magenta] - Show subscription statistics report\n"
+        "[yellow]q[/yellow] - Quit the program",
+        title="[bold]Commands[/bold]",
+        border_style="cyan"
+    )
+    console.print(commands_panel)
 
 
 def main():
     """Main function to run the script logic."""
-    print("--- YouTube Subscription Manager ---")
+    # Display welcome banner
+    welcome_panel = Panel(
+        "[bold blue]YouTube Subscription Manager[/bold blue]\n"
+        "[dim]Manage your YouTube subscriptions with PostgreSQL database integration[/dim]",
+        title="🎬 Welcome",
+        border_style="blue"
+    )
+    console.print(welcome_panel)
+    
+    # Authenticate with YouTube
+    logger.info("Authenticating with YouTube API...")
     youtube = authenticate_youtube()
     if not youtube:
-        print("Could not authenticate with YouTube. Exiting.")
+        error_panel = Panel(
+            "[red]❌ YouTube Authentication Failed[/red]\n\n"
+            "[yellow]Please check:[/yellow]\n"
+            "• client_secret.json file exists\n"
+            "• Google Cloud Console credentials are correct\n"
+            "• YouTube Data API v3 is enabled",
+            title="[bold red]Authentication Error[/bold red]",
+            border_style="red"
+        )
+        console.print(error_panel)
+        logger.error("Could not authenticate with YouTube. Exiting.")
         return
 
+    # Connect to database (will exit if fails)
     conn = connect_db()
 
+    # Fetch subscriptions if database is empty
     if conn and is_db_empty(conn):
-        print("Database is empty. Fetching subscriptions from YouTube...")
+        logger.info("Database is empty. Fetching subscriptions from YouTube...")
         subscriptions = get_all_subscriptions(youtube)
         if subscriptions:
             insert_subscriptions_to_db(conn, subscriptions)
         else:
-            print("Could not find any subscriptions or an error occurred.")
+            logger.warning("Could not find any subscriptions or an error occurred.")
 
+    # Display subscription report
     if conn:
-        print("\nFetching complete. Please review your subscriptions in the database.")
-        print("Set the 'status' column to 'TO_BE_UNSUBSCRIBED' for channels you wish to remove.")
+        print_subscription_report(conn)
+        
+        success_panel = Panel(
+            "[green]✅ Setup Complete![/green]\n\n"
+            "[blue]Next steps:[/blue]\n"
+            "• Review your subscriptions in the database\n"
+            "• Set 'status' column to 'TO_BE_UNSUBSCRIBED' for channels to remove\n"
+            "• Use the commands below to manage subscriptions",
+            title="[bold green]Ready[/bold green]",
+            border_style="green"
+        )
+        console.print(success_panel)
 
     print_instructions()
 
     while True:
-        print("\nEnter a command: ", end="", flush=True)
+        console.print("\n[bold cyan]Enter a command:[/bold cyan] ", end="")
         char = get_char()
-        print(char)  # Echo the character
+        console.print(char)  # Echo the character
 
         if char == "q":
-            print("Exiting.")
+            logger.info("Exiting program.")
             break
         elif char == "p":
             print_all_channels_from_db(conn)
         elif char == "f":
-            print("Force refetching all subscriptions...")
+            logger.info("Force refetching all subscriptions...")
             subscriptions = get_all_subscriptions(youtube)
             if subscriptions:
                 insert_subscriptions_to_db(conn, subscriptions)
         elif char == "r":
             channels_to_remove = get_channels_to_unsubscribe_from_db(conn)
             unsubscribe_from_channels(youtube, conn, channels_to_remove)
+        elif char == "s":
+            print_subscription_report(conn)
         else:
-            print("Unknown command.")
+            console.print("[yellow]Unknown command.[/yellow]")
             print_instructions()
 
     if conn:
         conn.close()
-        print("Database connection closed.")
+        logger.info("Database connection closed.")
 
 
 if __name__ == "__main__":
