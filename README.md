@@ -1,112 +1,203 @@
-YouTube Subscription Manager
-A Python script to list all your YouTube subscriptions and selectively unsubscribe from channels.
+# YouTube Subscription Manager
 
-⚠️ Important Note on API Quotas
+A Python script to manage your YouTube subscriptions with PostgreSQL database integration. List all your subscriptions, review them in a database, and selectively unsubscribe from channels.
+
+## ⚠️ Important Note on API Quotas
+
 The YouTube Data API has a daily usage limit called a "quota."
 
-Listing subscriptions is very cheap (1 quota unit per page of 50 channels).
-
-Unsubscribing is very expensive (50 quota units per channel).
+- **Listing subscriptions** is very cheap (1 quota unit per page of 50 channels)
+- **Unsubscribing** is very expensive (50 quota units per channel)
 
 You have a free quota of 10,000 units per day. This means you can unsubscribe from a maximum of 200 channels per day (10000 / 50 = 200). If you have more than 200 channels to remove, you will need to run the script again the next day.
 
-Setup Instructions
-Step 1: Prerequisites
-Install Python: Ensure you have Python 3.8 or newer installed.
+## Prerequisites
 
-Install uv: uv is a very fast Python package manager. If you don't have it, install it with:
+- **Python 3.8+** installed on your system
+- **Docker** installed for running PostgreSQL
+- **uv** (Python package manager) - install with: `pip install uv`
 
-pip install uv
+## Setup Instructions
 
-Step 2: Get Your YouTube API Credentials
-You need to authorize this script to manage your YouTube account.
+### Step 1: Set Up PostgreSQL Database with Docker
 
-Go to the Google Cloud Console: https://console.cloud.google.com/
+1. **Start PostgreSQL container:**
+   ```bash
+   docker run --name youtube-postgres \
+     -e POSTGRES_PASSWORD=password \
+     -e POSTGRES_DB=youtube_subscriptions \
+     -p 5432:5432 \
+     -d postgres:15
+   ```
 
-Create a new project: If you don't have one, click the project selector at the top and create a "New Project". Give it a name like "YouTube Manager".
+2. **Create the database schema:**
+   ```bash
+   # Copy the schema to the container
+   docker cp schema.sql youtube-postgres:/schema.sql
+   
+   # Execute the schema to create tables
+   docker exec -it youtube-postgres psql -U postgres -d youtube_subscriptions -f /schema.sql
+   ```
 
-Enable the YouTube API:
+3. **Test the database connection:**
+   ```bash
+   # Connect to the database to verify it's working
+   docker exec -it youtube-postgres psql -U postgres -d youtube_subscriptions
+   
+   # In the PostgreSQL prompt, run:
+   \dt
+   # You should see the 'subscriptions' table
+   
+   # Exit with:
+   \q
+   ```
 
-In the search bar at the top, search for "YouTube Data API v3" and select it.
+### Step 2: Get Your YouTube API Credentials
 
-Click the "ENABLE" button.
+1. **Go to the Google Cloud Console:** https://console.cloud.google.com/
 
-Configure the OAuth Consent Screen:
+2. **Create a new project:**
+   - Click the project selector at the top
+   - Create a "New Project" named "YouTube Manager"
 
-From the navigation menu (☰), go to APIs & Services > OAuth consent screen.
+3. **Enable the YouTube API:**
+   - Search for "YouTube Data API v3" in the search bar
+   - Select it and click "ENABLE"
 
-Select "External" for the User Type and click "CREATE".
+4. **Configure the OAuth Consent Screen:**
+   - Go to APIs & Services > OAuth consent screen
+   - Select "External" for User Type and click "CREATE"
+   - Fill in required fields:
+     - App name: YouTube Unsubscriber Script
+     - User support email: Your email address
+     - Developer contact information: Your email address
+   - Click "SAVE AND CONTINUE" through all pages
 
-Fill in the required fields:
+5. **Create Credentials:**
+   - Go to APIs & Services > Credentials
+   - Click "+ CREATE CREDENTIALS" > "OAuth client ID"
+   - Select "Desktop app" as Application type
+   - Name it "Desktop Client 1"
+   - Click "CREATE"
 
-App name: YouTube Unsubscriber Script (or any name)
+6. **Download the Credentials File:**
+   - Click "DOWNLOAD JSON" in the popup
+   - **Rename the file to `client_secret.json`**
+   - Place it in the same directory as `main.py`
 
-User support email: Your email address
+### Step 3: Install Project Dependencies
 
-Developer contact information: Your email address
+1. **Create and activate virtual environment:**
+   ```bash
+   # Create virtual environment
+   uv venv
+   
+   # Activate it
+   # On macOS/Linux:
+   source .venv/bin/activate
+   
+   # On Windows:
+   .venv\Scripts\activate
+   ```
 
-Click "SAVE AND CONTINUE" through the "Scopes" and "Test users" pages. You don't need to add anything here. Finally, click "BACK TO DASHBOARD".
+2. **Install dependencies:**
+   ```bash
+   uv pip install -e .
+   ```
 
-Create Credentials:
+### Step 4: Configure Environment Variables
 
-Go to APIs & Services > Credentials.
+The application uses environment variables for configuration. A `.env` file is provided with default values:
 
-Click "+ CREATE CREDENTIALS" and select "OAuth client ID".
+```bash
+# YouTube API Configuration
+CLIENT_SECRETS_FILE=client_secret.json
+SCOPES=https://www.googleapis.com/auth/youtube
+API_SERVICE_NAME=youtube
+API_VERSION=v3
+TOKEN_FILE=token.pickle
 
-For Application type, select "Desktop app".
+# Database Configuration
+DB_NAME=youtube_subscriptions
+DB_USER=postgres
+DB_PASSWORD=password
+DB_HOST=localhost
+DB_PORT=5432
+```
 
-Give it a name, like "Desktop Client 1".
+**Important:** The `.env` file is already created with default values. You can modify these values as needed for your setup. The `.env` file is excluded from version control for security.
 
-Click "CREATE".
+## How to Run the Script
 
-Download the Credentials File:
+1. **Activate the virtual environment:**
+   ```bash
+   source .venv/bin/activate  # macOS/Linux
+   # or
+   .venv\Scripts\activate     # Windows
+   ```
 
-A popup will show your Client ID and Secret. Click "DOWNLOAD JSON".
+2. **Run the script:**
+   ```bash
+   python main.py
+   ```
 
-IMPORTANT: Rename the downloaded file to client_secret.json and place it in the same directory as the main.py script.
+3. **First-time Authorization:**
+   - A browser tab will open for Google authentication
+   - Log in to your Google Account
+   - Click "Advanced" > "Go to [Your App Name] (unsafe)" when prompted
+   - Grant permission to manage your YouTube account
+   - Close the browser tab after approval
 
-Step 3: Install Project Dependencies
-Open your terminal in the project directory.
+4. **Initial Setup:**
+   - The script will automatically fetch all your subscriptions
+   - Data will be stored in the PostgreSQL database
+   - You'll see a message when fetching is complete
 
-Create a virtual environment using uv:
+## Using the Application
 
-uv venv
+The script runs in an interactive mode with the following commands:
 
-Activate the environment:
+- **`p`** - Print all subscriptions from the database
+- **`f`** - Force refetch all subscriptions from YouTube and update the database
+- **`r`** - Run unsubscription process for channels marked as 'TO_BE_UNSUBSCRIBED'
+- **`q`** - Quit the program
 
-On macOS/Linux: source .venv/bin/activate
+### Workflow:
 
-On Windows: .venv\Scripts\activate
+1. **Review subscriptions:** Use `p` to see all your subscriptions
+2. **Mark for removal:** Use a database client (like pgAdmin, DBeaver, or psql) to change the `status` column to `TO_BE_UNSUBSCRIBED` for channels you want to remove
+3. **Execute removal:** Use `r` to unsubscribe from all marked channels
 
-Install the required libraries using uv:
+### Database Schema
 
-uv pip install -r requirements.txt
+The `subscriptions` table includes:
+- `id` - Primary key
+- `youtube_channel_id` - YouTube channel ID
+- `youtube_subscription_id` - Subscription ID (used for unsubscribing)
+- `channel_name` - Display name of the channel
+- `channel_link` - Direct link to the channel
+- `subscription_date` - When you subscribed
+- `status` - Current status: `SUBSCRIBED`, `TO_BE_UNSUBSCRIBED`, or `UNSUBSCRIBED`
 
-(Note: uv can read the dependencies from a requirements.txt file, which it understands from the pyproject.toml.) If that command gives you trouble, you can install them directly:
+## Troubleshooting
 
-uv pip install google-api-python-client google-auth-oauthlib
+### Database Connection Issues
+- Ensure Docker container is running: `docker ps`
+- Check if PostgreSQL is accessible: `docker exec -it youtube-postgres psql -U postgres -d youtube_subscriptions`
 
-How to Run the Script
-Activate the virtual environment if you haven't already.
+### API Quota Exceeded
+- Wait 24 hours for quota reset
+- Check your quota usage in Google Cloud Console
 
-Run the script from your terminal:
+### Authentication Issues
+- Delete `token.pickle` and re-run the script
+- Ensure `client_secret.json` is in the correct location
 
-python main.py
+## Stopping the Database
 
-First-time Authorization: The first time you run it, a new tab will open in your web browser.
+When you're done, stop the PostgreSQL container:
 
-Log in to the Google Account you want to manage.
-
-You will see a "Google hasn’t verified this app" warning. This is normal because it's your own personal script. Click "Advanced" and then "Go to [Your App Name] (unsafe)".
-
-Grant the script permission to manage your YouTube account.
-
-After you approve, you can close the browser tab. A token.json file will be created. You won't have to do this again unless you delete that file.
-
-Follow the Prompts: The script will fetch all your subscriptions and then ask you one by one if you want to unsubscribe.
-
-y = yes, unsubscribe
-
-n = no, keep subscription
-
-q = quit the selection process and proceed with unsubscribing the ones you've already selected.
+```bash
+docker stop youtube-postgres
+docker rm youtube-postgres
+```

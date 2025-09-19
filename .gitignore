@@ -11,3 +11,5 @@ __pycache__/
 # IMPORTANT: Never commit your secrets or tokens!
 client_secret.json
 token.*
+
+*.env*
