@@ -2,21 +2,23 @@
 YouTube API operations for YouTube Subscription Manager.
 """
 
+import logging
 import os
 import pickle
+
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-import logging
 
-from .config import (
+from src.config import (
     CLIENT_SECRETS_FILE,
     SCOPES,
     API_SERVICE_NAME,
     API_VERSION,
     TOKEN_FILE,
 )
+from src.database import update_subscription_status_in_db
 
 logger = logging.getLogger("youtube-unsubscriber")
 
@@ -138,8 +140,6 @@ def unsubscribe_from_channels(youtube, conn, channels, quota_tracker=None):
                 quota_tracker.record_api_call("subscriptions.delete", 1)
 
             # On success, update the database
-            from .database import update_subscription_status_in_db
-
             update_subscription_status_in_db(conn, subscription_id, "UNSUBSCRIBED")
             successful_unsubs += 1
             logger.info(f"Successfully unsubscribed from '{channel_title}'.")

@@ -2,12 +2,15 @@
 User interface components for YouTube Subscription Manager.
 """
 
+import logging
 import sys
 import termios
 import tty
+
 from rich.console import Console
 from rich.panel import Panel
-import logging
+
+from src.database import get_subscription_stats
 
 logger = logging.getLogger("youtube-unsubscriber")
 console = Console()
@@ -31,8 +34,6 @@ def print_subscription_report(conn, quota_tracker=None):
         console.print("[yellow]Database connection not available.[/yellow]")
         return
 
-    from .database import get_subscription_stats
-
     stats = get_subscription_stats(conn)
     if not stats:
         console.print("[yellow]No subscription data available.[/yellow]")
@@ -51,6 +52,10 @@ def print_subscription_report(conn, quota_tracker=None):
         elif status == "UNSUBSCRIBED":
             color = "red"
             icon = "❌"
+        else:
+            # Default fallback
+            color = "white"
+            icon = "❓"
 
         status_text += (
             "["
@@ -161,17 +166,17 @@ def print_quota_status(quota_tracker):
         title_color = "blue"
 
     # Create detailed quota information
-    quota_info = f"[bold]Daily Quota Usage:[/bold]\n"
+    quota_info = "[bold]Daily Quota Usage:[/bold]\n"
     quota_info += f"Used: {status['used']:,} / {status['limit']:,} units ({status['percentage_used']:.1f}%)\n"
     quota_info += f"Remaining: {status['remaining']:,} units\n\n"
 
-    quota_info += f"[bold]Unsubscription Capacity:[/bold]\n"
+    quota_info += "[bold]Unsubscription Capacity:[/bold]\n"
     quota_info += f"Max unsubscriptions today: {max_unsubs}\n"
-    quota_info += f"Cost per unsubscription: 50 units\n\n"
+    quota_info += "Cost per unsubscription: 50 units\n\n"
 
     # Add daily usage breakdown
     if status["daily_usage"]:
-        quota_info += f"[bold]Today's API Calls:[/bold]\n"
+        quota_info += "[bold]Today's API Calls:[/bold]\n"
         for operation, count in status["daily_usage"].items():
             cost = count * (50 if "delete" in operation else 1)
             quota_info += f"• {operation}: {count} calls ({cost} units)\n"

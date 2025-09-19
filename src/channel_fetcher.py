@@ -3,8 +3,9 @@ Channel metadata fetching and management.
 """
 
 import logging
-from typing import List, Dict, Optional, Tuple
-from googleapiclient.errors import HttpError
+from typing import Dict, List, Optional
+
+from googleapiclient.errors import HttpError  # type: ignore
 
 logger = logging.getLogger("youtube-unsubscriber")
 
@@ -128,36 +129,34 @@ def get_topic_categories() -> Dict[str, str]:
     """
     return {
         # Entertainment
-        "/m/02jjt": "Entertainment",
+        "/m/02jjt": "Entertainment",  # This is the canonical topic for Entertainment
         "/m/09x0r": "Comedy",
         "/m/02vxn": "Music",
-        "/m/01k8wb": "Movies",
-        "/m/02jjt": "TV Shows",
+        "/m/01k8wb": "Movies",  # This is the canonical topic for Movies
         # Education
-        "/m/01k8wb": "Education",
-        "/m/02jjt": "Science",
-        "/m/01k8wb": "Technology",
-        "/m/02jjt": "Howto & Style",
-        # Gaming
         "/m/0bzvm2": "Gaming",
         "/m/06ntj": "Video Games",
-        # Lifestyle
         "/m/019_rr": "Food",
-        "/m/01k8wb": "Cooking",
-        "/m/02jjt": "Travel",
-        "/m/01k8wb": "Fashion",
-        "/m/02jjt": "Beauty",
-        # News & Politics
         "/m/05qt0": "News",
-        "/m/02jjt": "Politics",
-        # Sports
-        "/m/06ntj": "Sports",
-        "/m/01k8wb": "Fitness",
-        # Other
-        "/m/02jjt": "People & Blogs",
-        "/m/01k8wb": "Autos & Vehicles",
-        "/m/02jjt": "Pets & Animals",
-        "/m/01k8wb": "Nonprofits & Activism",
+        # Add more unique mappings as needed below
+        # If you want to support multiple categories per topic ID, use a list or a different structure.
+        # The following are commented out because their keys are duplicates above:
+        # "/m/02jjt": "TV Shows",
+        # "/m/01k8wb": "Education",
+        # "/m/02jjt": "Science",
+        # "/m/01k8wb": "Technology",
+        # "/m/02jjt": "Howto & Style",
+        # "/m/01k8wb": "Cooking",
+        # "/m/02jjt": "Travel",
+        # "/m/01k8wb": "Fashion",
+        # "/m/02jjt": "Beauty",
+        # "/m/02jjt": "Politics",
+        # "/m/06ntj": "Sports",
+        # "/m/01k8wb": "Fitness",
+        # "/m/02jjt": "People & Blogs",
+        # "/m/01k8wb": "Autos & Vehicles",
+        # "/m/02jjt": "Pets & Animals",
+        # "/m/01k8wb": "Nonprofits & Activism",
     }
 
 

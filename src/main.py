@@ -3,11 +3,12 @@ Main application entry point for YouTube Subscription Manager.
 """
 
 import logging
+
 from rich.console import Console
 from rich.logging import RichHandler
 
-from .config import *
-from .database import (
+# Config imports are used in other modules, not directly in main
+from src.database import (
     connect_db,
     is_db_empty,
     insert_subscriptions_to_db,
@@ -17,12 +18,12 @@ from .database import (
     insert_channel_metadata,
     print_channels_with_metadata,
 )
-from .youtube_api import (
+from src.youtube_api import (
     authenticate_youtube,
     get_all_subscriptions,
     unsubscribe_from_channels,
 )
-from .ui import (
+from src.ui import (
     print_welcome_banner,
     print_authentication_error,
     print_success_panel,
@@ -31,8 +32,8 @@ from .ui import (
     print_quota_status,
     get_char,
 )
-from .quota_tracker import QuotaTracker
-from .channel_fetcher import fetch_channel_metadata, process_channel_data
+from src.quota_tracker import QuotaTracker
+from src.channel_fetcher import fetch_channel_metadata, process_channel_data
 
 # Initialize Rich console and logging
 console = Console()
@@ -87,26 +88,54 @@ def fetch_and_store_channel_metadata(youtube, conn, quota_tracker):
     logger.info("Channel metadata fetching complete.")
 
 
-def main():
-    """Main function to run the script logic."""
-    # Display welcome banner
-    print_welcome_banner()
+def handle_user_command(char, youtube, conn, quota_tracker):
+    """Handle user input commands."""
+    if char == "q":
+        print_quota_status(quota_tracker)
+    elif char == "x":
+        logger.info("Exiting program.")
+        return False
+    elif char == "p":
+        print_all_channels_from_db(conn)
+    elif char == "f":
+        logger.info("Force refetching all subscriptions...")
+        subscriptions = get_all_subscriptions(youtube, quota_tracker)
+        if subscriptions:
+            insert_subscriptions_to_db(conn, subscriptions, quota_tracker)
+    elif char == "r":
+        channels_to_remove = get_channels_to_unsubscribe_from_db(conn)
+        unsubscribe_from_channels(youtube, conn, channels_to_remove, quota_tracker)
+    elif char == "s":
+        print_subscription_report(conn, quota_tracker)
+    elif char == "m":
+        print_channels_with_metadata(conn)
+    elif char == "u":
+        logger.info("Updating channel metadata...")
+        fetch_and_store_channel_metadata(youtube, conn, quota_tracker)
+    else:
+        console.print("[yellow]Unknown command.[/yellow]")
+        print_instructions()
+    return True
 
-    # Initialize quota tracker
+
+def initialize_application():
+    """Initialize the application components."""
+    print_welcome_banner()
     quota_tracker = QuotaTracker()
 
-    # Authenticate with YouTube
     logger.info("Authenticating with YouTube API...")
     youtube = authenticate_youtube()
     if not youtube:
         print_authentication_error()
         logger.error("Could not authenticate with YouTube. Exiting.")
-        return
+        return None, None, None
 
-    # Connect to database (will exit if fails)
     conn = connect_db()
+    return youtube, conn, quota_tracker
 
-    # Fetch subscriptions if database is empty
+
+def setup_initial_data(youtube, conn, quota_tracker):
+    """Set up initial data if needed."""
     if conn and is_db_empty(conn):
         logger.info("Database is empty. Fetching subscriptions from YouTube...")
         subscriptions = get_all_subscriptions(youtube, quota_tracker)
@@ -115,11 +144,18 @@ def main():
         else:
             logger.warning("Could not find any subscriptions or an error occurred.")
 
-    # Fetch channel metadata for channels that don't have it
     if conn:
         fetch_and_store_channel_metadata(youtube, conn, quota_tracker)
 
-    # Display subscription report
+
+def main():
+    """Main function to run the script logic."""
+    youtube, conn, quota_tracker = initialize_application()
+    if not youtube:
+        return
+
+    setup_initial_data(youtube, conn, quota_tracker)
+
     if conn:
         print_subscription_report(conn, quota_tracker)
         print_success_panel()
@@ -131,31 +167,8 @@ def main():
         char = get_char()
         console.print(char)  # Echo the character
 
-        if char == "q":
-            print_quota_status(quota_tracker)
-        elif char == "x":
-            logger.info("Exiting program.")
+        if not handle_user_command(char, youtube, conn, quota_tracker):
             break
-        elif char == "p":
-            print_all_channels_from_db(conn)
-        elif char == "f":
-            logger.info("Force refetching all subscriptions...")
-            subscriptions = get_all_subscriptions(youtube, quota_tracker)
-            if subscriptions:
-                insert_subscriptions_to_db(conn, subscriptions, quota_tracker)
-        elif char == "r":
-            channels_to_remove = get_channels_to_unsubscribe_from_db(conn)
-            unsubscribe_from_channels(youtube, conn, channels_to_remove, quota_tracker)
-        elif char == "s":
-            print_subscription_report(conn, quota_tracker)
-        elif char == "m":
-            print_channels_with_metadata(conn)
-        elif char == "u":
-            logger.info("Updating channel metadata...")
-            fetch_and_store_channel_metadata(youtube, conn, quota_tracker)
-        else:
-            console.print("[yellow]Unknown command.[/yellow]")
-            print_instructions()
 
     if conn:
         conn.close()

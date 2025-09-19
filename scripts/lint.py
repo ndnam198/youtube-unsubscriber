@@ -3,6 +3,7 @@
 Development tools runner for YouTube Unsubscriber.
 """
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -36,7 +37,6 @@ def main():
     print("=" * 50)
 
     # Change to project root
-    import os
 
     os.chdir(project_root)
 
@@ -66,7 +66,7 @@ def main():
         # Run format then lint
         success = True
         success &= run_command(commands["format"][0], commands["format"][1])
-        success &= run_command(commands["lint-quiet"][0], commands["lint-quiet"][1])
+        success &= run_command(commands["lint"][0], commands["lint"][1])
 
         if success:
             print("\n🎉 All checks passed!")

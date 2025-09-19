@@ -2,13 +2,14 @@
 Database operations for YouTube Subscription Manager.
 """
 
+import logging
+from typing import Dict, List, Optional
+
 import psycopg2
 from rich.console import Console
 from rich.panel import Panel
-import logging
-from typing import List, Dict, Optional
 
-from .config import DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT
+from src.config import DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT
 
 logger = logging.getLogger("youtube-unsubscriber")
 console = Console()

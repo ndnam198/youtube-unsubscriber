@@ -3,10 +3,10 @@ YouTube API quota tracking and management.
 """
 
 import json
-import os
-from datetime import datetime, timedelta
-from typing import Dict, Optional, Tuple
 import logging
+import os
+from datetime import datetime
+from typing import Dict
 
 logger = logging.getLogger("youtube-unsubscriber")
 
@@ -35,7 +35,7 @@ class QuotaTracker:
         """Load quota usage data from file."""
         if os.path.exists(self.quota_file):
             try:
-                with open(self.quota_file, "r") as f:
+                with open(self.quota_file, "r", encoding="utf-8") as f:
                     return json.load(f)
             except (json.JSONDecodeError, IOError) as e:
                 logger.warning(f"Could not load quota data: {e}")
@@ -50,7 +50,7 @@ class QuotaTracker:
     def _save_quota_data(self):
         """Save quota usage data to file."""
         try:
-            with open(self.quota_file, "w") as f:
+            with open(self.quota_file, "w", encoding="utf-8") as f:
                 json.dump(self.quota_data, f, indent=2)
         except IOError as e:
             logger.error(f"Could not save quota data: {e}")
@@ -135,12 +135,11 @@ class QuotaTracker:
 
         if percentage >= 90:
             return "critical"
-        elif percentage >= 75:
+        if percentage >= 75:
             return "warning"
-        elif percentage >= 50:
+        if percentage >= 50:
             return "info"
-        else:
-            return "ok"
+        return "ok"
 
     def get_quota_summary_text(self) -> str:
         """Get a formatted summary of quota usage."""

@@ -6,9 +6,9 @@ repos:
         language_version: python3
         args: [--config=.black]
 
-  # - repo: https://github.com/pylint-dev/pylint
-  #   rev: v3.3.8
-  #   hooks:
-  #     - id: pylint
-  #       args: [--rcfile=.pylintrc]
-  #       additional_dependencies: [astroid]
+  - repo: https://github.com/pylint-dev/pylint
+    rev: v3.3.8
+    hooks:
+      - id: pylint
+        args: [--rcfile=.pylintrc]
+        additional_dependencies: [astroid]
