@@ -319,3 +319,149 @@ def print_channels_with_metadata(conn):
             logger.info("")
 
     logger.info("-" * 50)
+
+
+def get_all_channels_with_metadata(conn):
+    """Get all channels with their metadata from the database."""
+    if not conn:
+        return []
+
+    try:
+        cursor = conn.cursor()
+
+        query = """
+        SELECT 
+            s.youtube_channel_id,
+            s.channel_name,
+            s.status,
+            s.subscription_date,
+            c.channel_title,
+            c.description,
+            c.subscriber_count,
+            c.video_count,
+            c.view_count,
+            c.country,
+            c.custom_url,
+            c.published_at,
+            c.thumbnail_url,
+            c.topic_ids
+        FROM subscriptions s
+        LEFT JOIN channels c ON s.youtube_channel_id = c.youtube_channel_id
+        ORDER BY s.channel_name
+        """
+
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        channels = []
+        for row in rows:
+            channel = {
+                "youtube_channel_id": row[0],
+                "channel_name": row[1],
+                "status": row[2],
+                "subscription_date": row[3],
+                "channel_title": row[4] or row[1],  # Fallback to channel_name
+                "description": row[5] or "No description available",
+                "subscriber_count": row[6],
+                "video_count": row[7],
+                "view_count": row[8],
+                "country": row[9],
+                "custom_url": row[10],
+                "published_at": row[11],
+                "thumbnail_url": row[12],
+                "topic_ids": row[13] or [],
+            }
+            channels.append(channel)
+
+        cursor.close()
+        return channels
+
+    except Exception as e:
+        logger.error(f"Error getting all channels with metadata: {e}")
+        return []
+
+
+def search_channels_with_metadata(conn, search_term, count_only=False):
+    """Search channels with metadata based on search term."""
+    if not conn:
+        return 0 if count_only else []
+
+    try:
+        cursor = conn.cursor()
+
+        # Escape special characters for LIKE
+        search_pattern = f"%{search_term}%"
+
+        if count_only:
+            query = """
+            SELECT COUNT(*)
+            FROM subscriptions s
+            LEFT JOIN channels c ON s.youtube_channel_id = c.youtube_channel_id
+            WHERE s.status = 'SUBSCRIBED'
+            AND (
+                LOWER(s.channel_name) LIKE LOWER(%s)
+                OR LOWER(COALESCE(c.channel_title, '')) LIKE LOWER(%s)
+                OR LOWER(COALESCE(c.description, '')) LIKE LOWER(%s)
+            )
+            """
+            cursor.execute(query, (search_pattern, search_pattern, search_pattern))
+            result = cursor.fetchone()
+            cursor.close()
+            return result[0] if result else 0
+
+        query = """
+            SELECT 
+                s.youtube_channel_id,
+                s.channel_name,
+                s.status,
+                s.subscription_date,
+                c.channel_title,
+                c.description,
+                c.subscriber_count,
+                c.video_count,
+                c.view_count,
+                c.country,
+                c.custom_url,
+                c.published_at,
+                c.thumbnail_url,
+                c.topic_ids
+            FROM subscriptions s
+            LEFT JOIN channels c ON s.youtube_channel_id = c.youtube_channel_id
+            WHERE s.status = 'SUBSCRIBED'
+            AND (
+                LOWER(s.channel_name) LIKE LOWER(%s)
+                OR LOWER(COALESCE(c.channel_title, '')) LIKE LOWER(%s)
+                OR LOWER(COALESCE(c.description, '')) LIKE LOWER(%s)
+            )
+            ORDER BY s.channel_name
+            """
+
+        cursor.execute(query, (search_pattern, search_pattern, search_pattern))
+        rows = cursor.fetchall()
+
+        channels = []
+        for row in rows:
+            channel = {
+                "youtube_channel_id": row[0],
+                "channel_name": row[1],
+                "status": row[2],
+                "subscription_date": row[3],
+                "channel_title": row[4] or row[1],  # Fallback to channel_name
+                "description": row[5] or "No description available",
+                "subscriber_count": row[6],
+                "video_count": row[7],
+                "view_count": row[8],
+                "country": row[9],
+                "custom_url": row[10],
+                "published_at": row[11],
+                "thumbnail_url": row[12],
+                "topic_ids": row[13] or [],
+            }
+            channels.append(channel)
+
+        cursor.close()
+        return channels
+
+    except Exception as e:
+        logger.error(f"Error searching channels: {e}")
+        return 0 if count_only else []

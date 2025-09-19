@@ -12,11 +12,9 @@ from src.database import (
     connect_db,
     is_db_empty,
     insert_subscriptions_to_db,
-    print_all_channels_from_db,
     get_channels_to_unsubscribe_from_db,
     get_channels_without_metadata,
     insert_channel_metadata,
-    print_channels_with_metadata,
 )
 from src.youtube_api import (
     authenticate_youtube,
@@ -31,6 +29,8 @@ from src.ui import (
     print_subscription_report,
     print_quota_status,
     get_char,
+    export_all_channels_to_file,
+    interactive_search_channels,
 )
 from src.quota_tracker import QuotaTracker
 from src.channel_fetcher import fetch_channel_metadata, process_channel_data
@@ -95,8 +95,6 @@ def handle_user_command(char, youtube, conn, quota_tracker):
     elif char == "x":
         logger.info("Exiting program.")
         return False
-    elif char == "p":
-        print_all_channels_from_db(conn)
     elif char == "f":
         logger.info("Force refetching all subscriptions...")
         subscriptions = get_all_subscriptions(youtube, quota_tracker)
@@ -107,8 +105,10 @@ def handle_user_command(char, youtube, conn, quota_tracker):
         unsubscribe_from_channels(youtube, conn, channels_to_remove, quota_tracker)
     elif char == "s":
         print_subscription_report(conn, quota_tracker)
-    elif char == "m":
-        print_channels_with_metadata(conn)
+    elif char == "e":
+        export_all_channels_to_file(conn)
+    elif char == "h":
+        interactive_search_channels(conn)
     elif char == "u":
         logger.info("Updating channel metadata...")
         fetch_and_store_channel_metadata(youtube, conn, quota_tracker)

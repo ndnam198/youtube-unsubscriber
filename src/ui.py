@@ -6,11 +6,16 @@ import logging
 import sys
 import termios
 import tty
+from datetime import datetime
 
 from rich.console import Console
 from rich.panel import Panel
 
-from src.database import get_subscription_stats
+from src.database import (
+    get_subscription_stats,
+    get_all_channels_with_metadata,
+    search_channels_with_metadata,
+)
 
 logger = logging.getLogger("youtube-unsubscriber")
 console = Console()
@@ -91,12 +96,12 @@ def print_instructions():
     """Prints the available commands."""
     commands_panel = Panel(
         "[bold cyan]Available Commands:[/bold cyan]\n\n"
-        "[green]p[/green] - Print all subscriptions from the database\n"
         "[blue]f[/blue] - Force refetch all subscriptions from YouTube and update the database\n"
         "[red]r[/red] - Run the unsubscription process for channels marked 'TO_BE_UNSUBSCRIBED'\n"
         "[magenta]s[/magenta] - Show subscription statistics report\n"
         "[cyan]q[/cyan] - Show quota status and remaining capacity\n"
-        "[purple]m[/purple] - Show channels with detailed metadata (subscribers, videos, topics)\n"
+        "[green]e[/green] - Export all channels with metadata to file\n"
+        "[purple]h[/purple] - Interactive search channels with live preview\n"
         "[orange]u[/orange] - Update channel metadata for channels missing it\n"
         "[yellow]x[/yellow] - Quit the program",
         title="[bold]Commands[/bold]",
@@ -192,3 +197,134 @@ def print_quota_status(quota_tracker):
         border_style=border_color,
     )
     console.print(quota_panel)
+
+
+def export_all_channels_to_file(conn):
+    """Export all channels with metadata to a file."""
+    if not conn:
+        console.print("[yellow]Database connection not available.[/yellow]")
+        return
+
+    try:
+        # Get all channels with metadata
+        channels = get_all_channels_with_metadata(conn)
+
+        if not channels:
+            console.print("[yellow]No channels found in database.[/yellow]")
+            return
+
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"subscription_export_{timestamp}.txt"
+
+        # Write to file
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write("YouTube Subscription Export\n")
+            f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Total Channels: {len(channels)}\n")
+            f.write("=" * 80 + "\n\n")
+
+            for channel in channels:
+                f.write(f"Channel: {channel['channel_title']}\n")
+                f.write(f"ID: {channel['youtube_channel_id']}\n")
+                f.write(f"Status: {channel['status']}\n")
+                f.write(f"Subscribers: {channel.get('subscriber_count', 'N/A'):,}\n")
+                f.write(f"Videos: {channel.get('video_count', 'N/A'):,}\n")
+                f.write(f"Views: {channel.get('view_count', 'N/A'):,}\n")
+                f.write(f"Country: {channel.get('country', 'N/A')}\n")
+                f.write(f"Description: {channel.get('description', 'N/A')[:200]}...\n")
+                f.write(f"Topics: {', '.join(channel.get('topic_ids', []))}\n")
+                f.write("-" * 80 + "\n\n")
+
+        console.print(
+            f"[green]✅ Exported {len(channels)} channels to {filename}[/green]"
+        )
+
+    except Exception as e:
+        logger.error(f"Error exporting channels: {e}")
+        console.print(f"[red]❌ Error exporting channels: {e}[/red]")
+
+
+def interactive_search_channels(conn):
+    """Interactive search with live preview count."""
+    if not conn:
+        console.print("[yellow]Database connection not available.[/yellow]")
+        return
+
+    console.print("\n[bold cyan]🔍 Interactive Channel Search[/bold cyan]")
+    console.print("[dim]Enter search term and press Enter to view results[/dim]")
+
+    # Get search term from user input
+    console.print("\n[bold]Enter search term:[/bold] ", end="")
+    search_term = input().strip()
+
+    try:
+        # Get count first
+        count = search_channels_with_metadata(conn, search_term, count_only=True)
+        console.print(
+            f"[green]Found {count} SUBSCRIBED channels matching '{search_term}'[/green]"
+        )
+
+        if count == 0:
+            console.print("[yellow]No channels found matching your search.[/yellow]")
+            return
+
+        # Get actual results
+        results = search_channels_with_metadata(conn, search_term, count_only=False)
+
+        # Display results
+        console.print(f"\n[bold green]Found {len(results)} channels:[/bold green]")
+        console.print("=" * 80)
+
+        for i, channel in enumerate(results, 1):
+            console.print(f"\n[bold]{i}. {channel['channel_title']}[/bold]")
+            console.print(f"   ID: {channel['youtube_channel_id']}")
+            console.print(f"   Status: {channel['status']}")
+            console.print(f"   Subscribers: {channel.get('subscriber_count', 'N/A'):,}")
+            console.print(f"   Videos: {channel.get('video_count', 'N/A'):,}")
+            console.print(f"   Views: {channel.get('view_count', 'N/A'):,}")
+            console.print(f"   Country: {channel.get('country', 'N/A')}")
+            console.print(
+                f"   Description: {channel.get('description', 'N/A')[:100]}..."
+            )
+
+        # Ask if user wants to save results
+        console.print(
+            f"\n[bold cyan]Save these {len(results)} results to file? (y/n):[/bold cyan] ",
+            end="",
+        )
+        save_choice = input().strip().lower()
+
+        if save_choice == "y":
+            # Generate filename with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"search_result_{timestamp}.txt"
+
+            # Write to file
+            with open(filename, "w", encoding="utf-8") as f:
+                f.write("YouTube Channel Search Results\n")
+                f.write(f"Search Term: '{search_term}'\n")
+                f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"Total Results: {len(results)}\n")
+                f.write("=" * 80 + "\n\n")
+
+                for i, channel in enumerate(results, 1):
+                    f.write(f"{i}. {channel['channel_title']}\n")
+                    f.write(f"   ID: {channel['youtube_channel_id']}\n")
+                    f.write(f"   Status: {channel['status']}\n")
+                    f.write(
+                        f"   Subscribers: {channel.get('subscriber_count', 'N/A'):,}\n"
+                    )
+                    f.write(f"   Videos: {channel.get('video_count', 'N/A'):,}\n")
+                    f.write(f"   Views: {channel.get('view_count', 'N/A'):,}\n")
+                    f.write(f"   Country: {channel.get('country', 'N/A')}\n")
+                    f.write(f"   Description: {channel.get('description', 'N/A')}\n")
+                    f.write("-" * 80 + "\n\n")
+
+            console.print(f"[green]✅ Search results saved to {filename}[/green]")
+        else:
+            console.print("[yellow]Results not saved.[/yellow]")
+
+    except Exception as e:
+        logger.error(f"Error searching channels: {e}")
+        console.print(f"[red]❌ Error searching channels: {e}[/red]")

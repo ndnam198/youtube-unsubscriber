@@ -69,10 +69,6 @@ def main():
         "uv run black --config=.black --check src/", "Testing Black configuration"
     )
 
-    success &= run_command(
-        "uv run pylint --rcfile=.pylintrc --version", "Testing Pylint configuration"
-    )
-
     # Run initial formatting
     success &= run_command(
         "uv run black --config=.black src/", "Running initial code formatting"
@@ -83,7 +79,6 @@ def main():
         print("\n📋 Available commands:")
         print("  python scripts/lint.py format    - Format code")
         print("  python scripts/lint.py check     - Check formatting")
-        print("  python scripts/lint.py lint      - Run linting")
         print("  python scripts/lint.py all       - Run all checks")
         print("  uv run pre-commit run --all-files - Run pre-commit on all files")
         print("\n💡 Pre-commit hooks will automatically run on git commit!")

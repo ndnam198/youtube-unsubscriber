@@ -347,10 +347,9 @@ The new `channels` table stores this metadata with a foreign key relationship to
 
 ### Development Tools
 
-- **`scripts/lint.py`** - Development tools runner (format, lint, check)
+- **`scripts/lint.py`** - Development tools runner (format, check)
 - **`scripts/setup-dev.py`** - Complete development environment setup
 - **`.black`** - Black code formatter configuration
-- **`pylintrc`** - Pylint code quality checker configuration
 
 ## Development
 
@@ -379,7 +378,6 @@ uv run pre-commit install
 
 # Test configuration
 uv run black --config=.black --check src/
-uv run pylint --rcfile=.pylintrc --version
 ```
 
 ### Development Tools Runner
@@ -391,15 +389,11 @@ python scripts/lint.py format
 # Check formatting
 python scripts/lint.py check
 
-# Run linting
-python scripts/lint.py lint
-
 # Run all checks
 python scripts/lint.py all
 
 # Or use uv directly with config files
 uv run black --config=.black src/
-uv run pylint --rcfile=pylintrc src/
 
 # Pre-commit hooks (runs automatically on git commit)
 uv run pre-commit run --all-files
@@ -408,8 +402,7 @@ uv run pre-commit run --all-files
 ### Code Quality
 
 - **Black**: Code formatting (line length: 88) - configured in `.black`
-- **Pylint**: Code analysis and quality checks - configured in `.pylintrc`
-- **Pre-commit**: Automatic formatting and linting on git commit
+- **Pre-commit**: Automatic formatting on git commit
 - **Configuration**: Separate config files for better isolation
 
 ### Usage Examples

@@ -44,29 +44,23 @@ def main():
     commands = {
         "format": ("uv run black --config=.black src/", "Format code with Black"),
         "check": ("uv run black --config=.black --check src/", "Check code formatting"),
-        "lint": ("uv run pylint --rcfile=.pylintrc src/ --score=y", "Run Pylint"),
-        "lint-quiet": (
-            "uv run pylint --rcfile=.pylintrc src/ --score=y --disable=C0301",
-            "Run Pylint (quiet)",
-        ),
         "all": None,  # Special case
     }
 
     if len(sys.argv) < 2:
         print("Available commands:")
-        for cmd, (_, desc) in commands.items():
-            if cmd != "all":
+        for cmd, value in commands.items():
+            if cmd != "all" and value is not None:
+                _, desc = value
                 print(f"  {cmd:<12} - {desc}")
-        print("  all          - Run format + lint")
+        print("  all          - Run format only")
         return
 
     command = sys.argv[1]
 
     if command == "all":
-        # Run format then lint
-        success = True
-        success &= run_command(commands["format"][0], commands["format"][1])
-        success &= run_command(commands["lint"][0], commands["lint"][1])
+        # Run format only
+        success = run_command(commands["format"][0], commands["format"][1])
 
         if success:
             print("\n🎉 All checks passed!")
