@@ -151,3 +151,26 @@ def unsubscribe_from_channels(youtube, conn, channels, quota_tracker=None):
     logger.info(
         f"Unsubscription process complete. Successfully unsubscribed from {successful_unsubs} channels."
     )
+
+
+def unsubscribe_from_channel(youtube, subscription_id, quota_tracker=None):
+    """Unsubscribe from a single channel by subscription ID."""
+    try:
+        # Check quota before proceeding
+        if quota_tracker:
+            if not quota_tracker.can_perform_operation("subscriptions.delete", 1):
+                logger.error("Insufficient quota to perform unsubscription.")
+                return False
+
+        # Execute unsubscription
+        youtube.subscriptions().delete(id=subscription_id).execute()
+
+        # Record quota usage for successful unsubscription
+        if quota_tracker:
+            quota_tracker.record_api_call("subscriptions.delete", 1)
+
+        return True
+
+    except HttpError as e:
+        logger.error(f"Failed to unsubscribe from channel: {e}")
+        return False

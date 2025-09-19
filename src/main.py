@@ -31,6 +31,7 @@ from src.ui import (
     get_char,
     export_all_channels_to_file,
     interactive_search_channels,
+    interactive_subscription_decision,
 )
 from src.quota_tracker import QuotaTracker
 from src.channel_fetcher import fetch_channel_metadata, process_channel_data
@@ -112,6 +113,9 @@ def handle_user_command(char, youtube, conn, quota_tracker):
     elif char == "u":
         logger.info("Updating channel metadata...")
         fetch_and_store_channel_metadata(youtube, conn, quota_tracker)
+    elif char == "d":
+        logger.info("Starting interactive subscription decision process...")
+        interactive_subscription_decision(conn, youtube, quota_tracker)
     else:
         console.print("[yellow]Unknown command.[/yellow]")
         print_instructions()

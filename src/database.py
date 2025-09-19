@@ -465,3 +465,67 @@ def search_channels_with_metadata(conn, search_term, count_only=False):
     except Exception as e:
         logger.error(f"Error searching channels: {e}")
         return 0 if count_only else []
+
+
+def get_subscriptions_sorted_by_subscriber_count(conn):
+    """Get all subscriptions sorted by subscriber count (lowest first)."""
+    if not conn:
+        return []
+
+    try:
+        cursor = conn.cursor()
+
+        query = """
+        SELECT 
+            s.youtube_channel_id,
+            s.youtube_subscription_id,
+            s.channel_name,
+            s.channel_link,
+            s.status,
+            s.subscription_date,
+            c.channel_title,
+            c.description,
+            c.subscriber_count,
+            c.video_count,
+            c.view_count,
+            c.country,
+            c.custom_url,
+            c.published_at,
+            c.thumbnail_url,
+            c.topic_ids
+        FROM subscriptions s
+        LEFT JOIN channels c ON s.youtube_channel_id = c.youtube_channel_id
+        ORDER BY COALESCE(c.subscriber_count, 0) ASC, s.channel_name ASC
+        """
+
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        subscriptions = []
+        for row in rows:
+            subscription = {
+                "youtube_channel_id": row[0],
+                "youtube_subscription_id": row[1],
+                "channel_name": row[2],
+                "channel_link": row[3],
+                "status": row[4],
+                "subscription_date": row[5],
+                "channel_title": row[6] or row[2],  # Fallback to channel_name
+                "description": row[7] or "No description available",
+                "subscriber_count": row[8] or 0,
+                "video_count": row[9] or 0,
+                "view_count": row[10] or 0,
+                "country": row[11] or "Unknown",
+                "custom_url": row[12],
+                "published_at": row[13],
+                "thumbnail_url": row[14],
+                "topic_ids": row[15] or [],
+            }
+            subscriptions.append(subscription)
+
+        cursor.close()
+        return subscriptions
+
+    except Exception as e:
+        logger.error(f"Error getting subscriptions sorted by subscriber count: {e}")
+        return []

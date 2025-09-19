@@ -6,6 +6,7 @@ import logging
 import sys
 import termios
 import tty
+import webbrowser
 from datetime import datetime
 
 from rich.console import Console
@@ -15,6 +16,7 @@ from src.database import (
     get_subscription_stats,
     get_all_channels_with_metadata,
     search_channels_with_metadata,
+    get_subscriptions_sorted_by_subscriber_count,
 )
 
 logger = logging.getLogger("youtube-unsubscriber")
@@ -103,6 +105,7 @@ def print_instructions():
         "[green]e[/green] - Export all channels with metadata to file\n"
         "[purple]h[/purple] - Interactive search channels with live preview\n"
         "[orange]u[/orange] - Update channel metadata for channels missing it\n"
+        "[bold red]d[/bold red] - Interactive decision: review each subscription one by one\n"
         "[yellow]x[/yellow] - Quit the program",
         title="[bold]Commands[/bold]",
         border_style="cyan",
@@ -328,3 +331,161 @@ def interactive_search_channels(conn):
     except Exception as e:
         logger.error(f"Error searching channels: {e}")
         console.print(f"[red]❌ Error searching channels: {e}[/red]")
+
+
+def interactive_subscription_decision(conn, youtube, quota_tracker):
+    """Interactive decision making for each subscription, sorted by subscriber count."""
+    if not conn:
+        console.print("[yellow]Database connection not available.[/yellow]")
+        return
+
+    from src.database import update_subscription_status_in_db
+
+    try:
+        # Get all subscriptions sorted by subscriber count
+        subscriptions = get_subscriptions_sorted_by_subscriber_count(conn)
+
+        if not subscriptions:
+            console.print("[yellow]No subscriptions found in database.[/yellow]")
+            return
+
+        console.print(f"\n[bold cyan]🎯 Interactive Subscription Decision[/bold cyan]")
+        console.print(
+            f"[dim]Reviewing {len(subscriptions)} subscriptions (sorted by subscriber count)[/dim]"
+        )
+        console.print("\n[bold]Commands:[/bold]")
+        console.print("[green]y[/green] - Unsubscribe from this channel")
+        console.print("[blue]s[/blue] - Skip (keep subscription)")
+        console.print("[purple]o[/purple] - Open channel in browser")
+        console.print("[yellow]q[/yellow] - Quit decision process")
+        console.print("\n" + "=" * 80)
+
+        unsubscribed_count = 0
+        skipped_count = 0
+
+        for i, subscription in enumerate(subscriptions, 1):
+            # Display subscription details
+            console.print(
+                f"\n[bold cyan]📺 Channel {i}/{len(subscriptions)}[/bold cyan]"
+            )
+            console.print("=" * 60)
+
+            # Channel info
+            console.print(f"[bold]Name:[/bold] {subscription['channel_title']}")
+            console.print(f"[bold]ID:[/bold] {subscription['youtube_channel_id']}")
+            console.print(f"[bold]Status:[/bold] {subscription['status']}")
+
+            # Metadata
+            console.print(
+                f"[bold]Subscribers:[/bold] {subscription['subscriber_count']:,}"
+            )
+            console.print(f"[bold]Videos:[/bold] {subscription['video_count']:,}")
+            console.print(f"[bold]Views:[/bold] {subscription['view_count']:,}")
+            console.print(f"[bold]Country:[/bold] {subscription['country']}")
+
+            # Description (truncated)
+            desc = subscription["description"]
+            if len(desc) > 200:
+                desc = desc[:200] + "..."
+            console.print(f"[bold]Description:[/bold] {desc}")
+
+            # Topics
+            if subscription["topic_ids"]:
+                topics_str = ", ".join(subscription["topic_ids"][:5])
+                if len(subscription["topic_ids"]) > 5:
+                    topics_str += "..."
+                console.print(f"[bold]Topics:[/bold] {topics_str}")
+
+            # Channel link
+            if subscription["channel_link"]:
+                console.print(f"[bold]Link:[/bold] {subscription['channel_link']}")
+
+            console.print("\n[bold]Decision:[/bold] ", end="")
+
+            # Get user decision
+            while True:
+                char = get_char()
+                console.print(char)
+
+                if char.lower() == "y":
+                    # Unsubscribe
+                    console.print("[red]Unsubscribing...[/red]")
+
+                    # Update database status first
+                    update_subscription_status_in_db(
+                        conn,
+                        subscription["youtube_subscription_id"],
+                        "TO_BE_UNSUBSCRIBED",
+                    )
+
+                    # Actually unsubscribe via API
+                    from src.youtube_api import unsubscribe_from_channel
+
+                    success = unsubscribe_from_channel(
+                        youtube, subscription["youtube_subscription_id"], quota_tracker
+                    )
+
+                    if success:
+                        update_subscription_status_in_db(
+                            conn,
+                            subscription["youtube_subscription_id"],
+                            "UNSUBSCRIBED",
+                        )
+                        console.print("[green]✅ Unsubscribed successfully![/green]")
+                        unsubscribed_count += 1
+                    else:
+                        # Revert database status if API call failed
+                        update_subscription_status_in_db(
+                            conn, subscription["youtube_subscription_id"], "SUBSCRIBED"
+                        )
+                        console.print(
+                            "[red]❌ Failed to unsubscribe. Status reverted.[/red]"
+                        )
+                    break
+
+                elif char.lower() == "s":
+                    # Skip (keep subscription)
+                    console.print("[blue]Skipped - keeping subscription[/blue]")
+                    skipped_count += 1
+                    break
+
+                elif char.lower() == "o":
+                    # Open in browser
+                    if subscription["channel_link"]:
+                        console.print("[purple]Opening channel in browser...[/purple]")
+                        webbrowser.open(subscription["channel_link"])
+                        console.print("[dim]Press any key to continue...[/dim]")
+                        get_char()  # Wait for user to press any key
+                    else:
+                        console.print("[yellow]No channel link available[/yellow]")
+                    console.print("\n[bold]Decision:[/bold] ", end="")
+                    continue
+
+                elif char.lower() == "q":
+                    # Quit
+                    console.print(
+                        "\n[yellow]Decision process cancelled by user.[/yellow]"
+                    )
+                    console.print(
+                        f"[dim]Processed {i-1}/{len(subscriptions)} channels[/dim]"
+                    )
+                    console.print(
+                        f"[dim]Unsubscribed: {unsubscribed_count}, Skipped: {skipped_count}[/dim]"
+                    )
+                    return
+
+                else:
+                    console.print(
+                        "[yellow]Invalid choice. Use y/s/o/q:[/yellow] ", end=""
+                    )
+                    continue
+
+        # Summary
+        console.print(f"\n[bold green]🎉 Decision process completed![/bold green]")
+        console.print(f"[green]Unsubscribed: {unsubscribed_count} channels[/green]")
+        console.print(f"[blue]Skipped: {skipped_count} channels[/blue]")
+        console.print(f"[dim]Total processed: {len(subscriptions)} channels[/dim]")
+
+    except Exception as e:
+        logger.error(f"Error in interactive subscription decision: {e}")
+        console.print(f"[red]❌ Error in decision process: {e}[/red]")
