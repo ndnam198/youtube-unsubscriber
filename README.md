@@ -323,6 +323,48 @@ The new `channels` table stores this metadata with a foreign key relationship to
 ### Channel Metadata
 - **`fetch_channel_metadata.py`** - Standalone script to fetch channel metadata
 
+### Development Tools
+- **`scripts/lint.py`** - Development tools runner (format, lint, check)
+
+## Development
+
+### Prerequisites
+- Python 3.9+
+- uv package manager
+
+### Setup Development Environment
+```bash
+# Install dependencies including dev tools
+uv sync --dev
+
+# Or install dev dependencies separately
+uv add --dev black pylint
+```
+
+### Development Tools
+```bash
+# Format code
+python scripts/lint.py format
+
+# Check formatting
+python scripts/lint.py check
+
+# Run linting
+python scripts/lint.py lint
+
+# Run all checks
+python scripts/lint.py all
+
+# Or use uv directly
+uv run black src/
+uv run pylint src/
+```
+
+### Code Quality
+- **Black**: Code formatting (line length: 88)
+- **Pylint**: Code analysis and quality checks
+- **Configuration**: Both tools configured in `pyproject.toml`
+
 ### Usage Examples
 ```bash
 # Complete setup from scratch

@@ -3,6 +3,11 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.egg-info/
+
+# Build artifacts
+dist/
+build/
 
 # Virtual Environment created by uv
 .venv/
@@ -16,3 +21,20 @@ token.*
 
 # Quota tracking data
 quota_usage.json
+
+# Development tools
+.pylintrc
+.mypy_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
