@@ -30,23 +30,35 @@ You have a free quota of 10,000 units per day. This means you can unsubscribe fr
      -d postgres:15
    ```
 
-2. **Create the database schema:**
+2. **Run automated database setup:**
    ```bash
-   # Copy the schema to the container
-   docker cp schema.sql youtube-postgres:/schema.sql
+   python setup_database.py
+   ```
    
-   # Execute the schema to create tables
+   This script will:
+   - Create the database if it doesn't exist
+   - Set up the initial subscriptions table
+   - Run migration to add the channels table
+   - Create all necessary indexes and constraints
+   - Verify the setup is complete
+
+3. **Alternative: Manual setup (if automated setup fails):**
+   ```bash
+   # Copy schema file to container
+   docker cp schema/schema.sql youtube-postgres:/schema.sql
+   
+   # Create complete database schema
    docker exec -it youtube-postgres psql -U postgres -d youtube_subscriptions -f /schema.sql
    ```
 
-3. **Test the database connection:**
+4. **Test the database connection:**
    ```bash
    # Connect to the database to verify it's working
    docker exec -it youtube-postgres psql -U postgres -d youtube_subscriptions
    
    # In the PostgreSQL prompt, run:
    \dt
-   # You should see the 'subscriptions' table
+   # You should see both 'subscriptions' and 'channels' tables
    
    # Exit with:
    \q
@@ -148,7 +160,13 @@ DB_PORT=5432
    youtube-unsubscriber
    ```
 
-3. **First-time Authorization:**
+3. **Fetch channel metadata (optional but recommended):**
+   ```bash
+   # Fetch detailed metadata for all channels
+   python fetch_channel_metadata.py
+   ```
+
+4. **First-time Authorization:**
    - A browser tab will open for Google authentication
    - Log in to your Google Account
    - Click "Advanced" > "Go to [Your App Name] (unsafe)" when prompted
@@ -212,7 +230,8 @@ youtube_unsubscriber/
 ├── database.py          # Database operations
 ├── youtube_api.py       # YouTube API operations
 ├── ui.py               # User interface components
-└── quota_tracker.py    # API quota tracking and management
+├── quota_tracker.py    # API quota tracking and management
+└── channel_fetcher.py  # Channel metadata fetching and processing
 ```
 
 ### Module Responsibilities
@@ -222,6 +241,7 @@ youtube_unsubscriber/
 - **`youtube_api.py`**: YouTube API authentication and operations
 - **`ui.py`**: User interface components and Rich console formatting
 - **`quota_tracker.py`**: YouTube API quota tracking and management
+- **`channel_fetcher.py`**: Channel metadata fetching and processing
 - **`main.py`**: Main application entry point and orchestration
 
 ## API Quota Tracking
@@ -248,6 +268,74 @@ The application now includes intelligent quota tracking to help you manage your 
 - **🔵 INFO** (50-75%): Moderate usage
 - **🟡 WARNING** (75-90%): High usage - be careful
 - **🔴 CRITICAL** (90%+): Very high usage - consider stopping
+
+## Channel Metadata Enhancement
+
+The application now fetches and stores detailed channel metadata to help you make better decisions about which channels to unsubscribe from:
+
+### Available Information
+
+#### ✅ **Retrievable Data:**
+- **`subscriber_count`** - Number of subscribers
+- **`video_count`** - Total videos uploaded
+- **`view_count`** - Total views across all videos
+- **`description`** - Channel description text
+- **`country`** - Channel's country
+- **`custom_url`** - Channel's custom URL (e.g., @channelname)
+- **`published_at`** - When the channel was created
+- **`thumbnail_url`** - Channel thumbnail image
+- **`topic_ids`** - YouTube topic categories (e.g., Education, Gaming, Music)
+
+#### ❌ **Not Available:**
+- **`last_action_time`** - YouTube API doesn't provide last activity time
+- **Custom content tags** - Only YouTube's topic IDs are available, not descriptive tags
+
+### Database Schema
+
+The new `channels` table stores this metadata with a foreign key relationship to the `subscriptions` table:
+
+```sql
+-- The complete schema is now in schema/schema.sql
+\i schema/schema.sql
+```
+
+### New Commands
+
+- **`m`** - Show channels with detailed metadata (subscribers, videos, topics)
+- **`u`** - Update channel metadata for channels missing it
+
+### Quota Impact
+
+- **Fetching channel metadata**: 1 unit per request (up to 50 channels per request)
+- **Automatic fetching**: Happens on first run and when using the `u` command
+
+## Available Scripts
+
+### Main Application
+- **`run.py`** - Main application entry point
+- **`python -m src.main`** - Run as module
+- **`youtube-unsubscriber`** - Run as installed command
+
+### Database Management
+- **`setup_database.py`** - Automated database setup
+- **`schema/schema.sql`** - Complete database schema (subscriptions + channels tables)
+
+### Channel Metadata
+- **`fetch_channel_metadata.py`** - Standalone script to fetch channel metadata
+
+### Usage Examples
+```bash
+# Complete setup from scratch
+python setup_database.py
+python fetch_channel_metadata.py
+python run.py
+
+# Just fetch metadata for existing setup
+python fetch_channel_metadata.py
+
+# Run main application
+python run.py
+```
 
 ## Stopping the Database
 

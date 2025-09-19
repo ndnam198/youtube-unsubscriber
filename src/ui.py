@@ -78,6 +78,8 @@ def print_instructions():
         "[red]r[/red] - Run the unsubscription process for channels marked 'TO_BE_UNSUBSCRIBED'\n"
         "[magenta]s[/magenta] - Show subscription statistics report\n"
         "[cyan]q[/cyan] - Show quota status and remaining capacity\n"
+        "[purple]m[/purple] - Show channels with detailed metadata (subscribers, videos, topics)\n"
+        "[orange]u[/orange] - Update channel metadata for channels missing it\n"
         "[yellow]x[/yellow] - Quit the program",
         title="[bold]Commands[/bold]",
         border_style="cyan"

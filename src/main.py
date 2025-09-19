@@ -7,10 +7,11 @@ from rich.console import Console
 from rich.logging import RichHandler
 
 from .config import *
-from .database import connect_db, is_db_empty, insert_subscriptions_to_db, print_all_channels_from_db, get_channels_to_unsubscribe_from_db
+from .database import connect_db, is_db_empty, insert_subscriptions_to_db, print_all_channels_from_db, get_channels_to_unsubscribe_from_db, get_channels_without_metadata, insert_channel_metadata, print_channels_with_metadata
 from .youtube_api import authenticate_youtube, get_all_subscriptions, unsubscribe_from_channels
 from .ui import print_welcome_banner, print_authentication_error, print_success_panel, print_instructions, print_subscription_report, print_quota_status, get_char
 from .quota_tracker import QuotaTracker
+from .channel_fetcher import fetch_channel_metadata, process_channel_data
 
 # Initialize Rich console and logging
 console = Console()
@@ -23,6 +24,44 @@ logging.basicConfig(
     handlers=[RichHandler(console=console, rich_tracebacks=True)]
 )
 logger = logging.getLogger("youtube-unsubscriber")
+
+
+def fetch_and_store_channel_metadata(youtube, conn, quota_tracker):
+    """Fetch and store channel metadata for channels that don't have it."""
+    if not conn:
+        logger.warning("Database connection not available.")
+        return
+    
+    # Get channel IDs that don't have metadata
+    channel_ids = get_channels_without_metadata(conn)
+    
+    if not channel_ids:
+        logger.info("All channels already have metadata.")
+        return
+    
+    logger.info(f"Fetching metadata for {len(channel_ids)} channels...")
+    
+    # Fetch metadata in batches
+    batch_size = 50  # YouTube API limit
+    for i in range(0, len(channel_ids), batch_size):
+        batch_ids = channel_ids[i:i + batch_size]
+        
+        try:
+            # Fetch channel metadata
+            raw_channels = fetch_channel_metadata(youtube, batch_ids, quota_tracker)
+            
+            # Process and store each channel
+            for channel_data in raw_channels:
+                processed_data = process_channel_data(channel_data)
+                insert_channel_metadata(conn, processed_data, quota_tracker)
+            
+            logger.info(f"Processed batch {i//batch_size + 1}/{(len(channel_ids) + batch_size - 1)//batch_size}")
+            
+        except Exception as e:
+            logger.error(f"Error processing channel metadata batch: {e}")
+            continue
+    
+    logger.info("Channel metadata fetching complete.")
 
 
 def main():
@@ -52,6 +91,10 @@ def main():
             insert_subscriptions_to_db(conn, subscriptions, quota_tracker)
         else:
             logger.warning("Could not find any subscriptions or an error occurred.")
+    
+    # Fetch channel metadata for channels that don't have it
+    if conn:
+        fetch_and_store_channel_metadata(youtube, conn, quota_tracker)
 
     # Display subscription report
     if conn:
@@ -82,6 +125,11 @@ def main():
             unsubscribe_from_channels(youtube, conn, channels_to_remove, quota_tracker)
         elif char == "s":
             print_subscription_report(conn, quota_tracker)
+        elif char == "m":
+            print_channels_with_metadata(conn)
+        elif char == "u":
+            logger.info("Updating channel metadata...")
+            fetch_and_store_channel_metadata(youtube, conn, quota_tracker)
         else:
             console.print("[yellow]Unknown command.[/yellow]")
             print_instructions()
