@@ -3,6 +3,7 @@ Main application entry point for YouTube Subscription Manager.
 """
 
 import logging
+import time
 
 from rich.console import Console
 from rich.logging import RichHandler
@@ -98,9 +99,96 @@ def handle_user_command(char, youtube, conn, quota_tracker):
         return False
     elif char == "f":
         logger.info("Force refetching all subscriptions...")
+
+        # Ask about content type fetching
+        from src.database import get_content_analysis_stats
+
+        stats = get_content_analysis_stats(conn)
+        unknown_count = stats.get("unknown_channels", 0)
+
+        if unknown_count > 0:
+            console.print(
+                f"\n[bold yellow]📊 Content Type Analysis Available[/bold yellow]"
+            )
+            console.print(f"Found {unknown_count} channels with unknown content type")
+
+            # Estimate quota consumption
+            from fetch_content_types import estimate_quota_consumption
+
+            estimate = estimate_quota_consumption(unknown_count)
+
+            console.print(
+                f"\n[bold red]⚠️  Quota Estimate for Content Analysis:[/bold red]"
+            )
+            console.print(f"  • Channels to analyze: {estimate['channels']}")
+            console.print(f"  • Total API calls: {estimate['total_calls']}")
+            console.print(
+                f"  • Estimated time: {estimate['estimated_hours']:.1f} hours"
+            )
+            console.print(
+                f"  • Current quota remaining: {quota_tracker.get_quota_status()['remaining']}"
+            )
+
+            response = input("\nAlso fetch content types? (y/N): ").strip().lower()
+            fetch_content_types = response == "y"
+        else:
+            fetch_content_types = False
+
+        # Fetch subscriptions
         subscriptions = get_all_subscriptions(youtube, quota_tracker)
         if subscriptions:
             insert_subscriptions_to_db(conn, subscriptions, quota_tracker)
+
+            # Fetch content types if requested
+            if fetch_content_types:
+                console.print(
+                    "\n[bold cyan]🎬 Starting content type analysis...[/bold cyan]"
+                )
+                from src.content_analyzer import ContentAnalyzer
+
+                analyzer = ContentAnalyzer(quota_tracker, youtube)
+
+                # Get channels that need analysis
+                from src.database import get_channels_needing_content_analysis
+
+                channels = get_channels_needing_content_analysis(
+                    conn, limit=50
+                )  # Limit to 50 for safety
+
+                if channels:
+                    console.print(f"Analyzing {len(channels)} channels...")
+
+                    for i, channel in enumerate(channels, 1):
+                        console.print(
+                            f"[{i}/{len(channels)}] {channel['channel_title']}"
+                        )
+
+                        try:
+                            result = analyzer.analyze_channel_content(
+                                channel["youtube_channel_id"]
+                            )
+                            if result:
+                                from src.database import save_content_analysis_result
+
+                                save_content_analysis_result(conn, result)
+                                console.print(
+                                    f"  ✅ {result.content_type} ({result.shorts_percentage:.1f}% shorts)"
+                                )
+                            else:
+                                console.print(f"  ❌ Analysis failed")
+                        except Exception as e:
+                            console.print(f"  ❌ Error: {str(e)}")
+
+                        # Small delay to avoid rate limiting
+                        time.sleep(0.5)
+
+                    console.print(
+                        f"\n[green]✅ Content type analysis completed![/green]"
+                    )
+                else:
+                    console.print(
+                        "[yellow]No channels need content type analysis[/yellow]"
+                    )
     elif char == "r":
         channels_to_remove = get_channels_to_unsubscribe_from_db(conn)
         unsubscribe_from_channels(youtube, conn, channels_to_remove, quota_tracker)

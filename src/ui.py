@@ -81,6 +81,42 @@ def print_subscription_report(conn, quota_tracker=None):
             + "]\n"
         )
 
+    # Add content type information
+    content_text = ""
+    try:
+        from src.database import get_content_analysis_stats
+
+        content_stats = get_content_analysis_stats(conn)
+        if content_stats:
+            content_text = f"\n\n[bold]Content Type Analysis:[/bold]\n"
+            content_text += (
+                f"Total channels: {content_stats.get('total_channels', 0)}\n"
+            )
+            content_text += f"Analyzed: {content_stats.get('analyzed_channels', 0)}\n"
+            content_text += f"Unknown: {content_stats.get('unknown_channels', 0)}\n"
+
+            by_type = content_stats.get("by_content_type", {})
+            if by_type:
+                content_text += "\nBreakdown:\n"
+                for content_type, count in by_type.items():
+                    if content_type == "SHORTS":
+                        color = "magenta"
+                        icon = "🎬"
+                    elif content_type == "LONGS":
+                        color = "blue"
+                        icon = "📺"
+                    elif content_type == "MIXED":
+                        color = "yellow"
+                        icon = "🔄"
+                    else:
+                        color = "white"
+                        icon = "❓"
+                    content_text += (
+                        f"[{color}]{icon} {content_type}: {count}[/{color}]\n"
+                    )
+    except Exception:
+        pass
+
     # Add quota information if available
     quota_text = ""
     if quota_tracker:
@@ -90,7 +126,7 @@ def print_subscription_report(conn, quota_tracker=None):
     report_panel = Panel(
         f"[bold blue]Total Subscriptions: {stats['total']}[/bold blue]\n\n"
         f"[bold]Status Breakdown:[/bold]\n"
-        f"{status_text.strip()}{quota_text}",
+        f"{status_text.strip()}{content_text}{quota_text}",
         title="📊 Subscription Report",
         border_style="blue",
     )
@@ -476,6 +512,31 @@ def interactive_subscription_decision(conn, youtube, quota_tracker):
             console.print(f"[bold]Videos:[/bold] {subscription['video_count']:,}")
             console.print(f"[bold]Views:[/bold] {subscription['view_count']:,}")
             console.print(f"[bold]Country:[/bold] {subscription['country']}")
+
+            # Content type information
+            content_type = subscription.get("content_type", "UNKNOWN")
+            shorts_percentage = subscription.get("shorts_percentage", 0)
+
+            if content_type == "SHORTS":
+                color = "magenta"
+                icon = "🎬"
+                type_text = f"SHORTS ({shorts_percentage:.1f}% shorts)"
+            elif content_type == "LONGS":
+                color = "blue"
+                icon = "📺"
+                type_text = f"LONGS ({100-shorts_percentage:.1f}% longs)"
+            elif content_type == "MIXED":
+                color = "yellow"
+                icon = "🔄"
+                type_text = f"MIXED ({shorts_percentage:.1f}% shorts)"
+            else:
+                color = "white"
+                icon = "❓"
+                type_text = "UNKNOWN"
+
+            console.print(
+                f"[bold]Content Type:[/bold] [{color}]{icon} {type_text}[/{color}]"
+            )
 
             # Description (truncated)
             desc = subscription["description"]

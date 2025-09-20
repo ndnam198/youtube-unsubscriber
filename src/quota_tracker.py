@@ -16,6 +16,8 @@ QUOTA_COSTS = {
     "subscriptions.list": 1,  # 1 unit per request
     "subscriptions.delete": 50,  # 50 units per request
     "channels.list": 1,  # 1 unit per request
+    "playlistItems.list": 1,  # 1 unit per request
+    "videos.list": 1,  # 1 unit per request
 }
 
 # Daily quota limit for YouTube Data API v3

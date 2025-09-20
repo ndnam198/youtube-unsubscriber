@@ -79,6 +79,35 @@ def insert_subscriptions_to_db(conn, subscriptions, quota_tracker=None):
             published_at = snippet["publishedAt"]
             channel_link = f"https://www.youtube.com/channel/{channel_id}"
 
+            # First, ensure the channel exists in the channels table (create placeholder if needed)
+            cur.execute(
+                """
+                INSERT INTO channels (youtube_channel_id, channel_title, description, subscriber_count, video_count, view_count, country, custom_url, published_at, thumbnail_url, topic_ids, content_type, shorts_count, longs_count, shorts_percentage, content_analysis_date)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (youtube_channel_id) DO UPDATE SET
+                    channel_title = EXCLUDED.channel_title;
+                """,
+                (
+                    channel_id,
+                    channel_title,
+                    "No description available",  # placeholder description
+                    None,  # subscriber_count - will be fetched later
+                    None,  # video_count - will be fetched later
+                    None,  # view_count - will be fetched later
+                    None,  # country
+                    None,  # custom_url
+                    published_at,
+                    None,  # thumbnail_url
+                    None,  # topic_ids
+                    "UNKNOWN",  # content_type - will be analyzed later
+                    0,  # shorts_count
+                    0,  # longs_count
+                    0.0,  # shorts_percentage
+                    None,  # content_analysis_date
+                ),
+            )
+
+            # Then insert/update the subscription
             cur.execute(
                 """
                 INSERT INTO subscriptions (youtube_channel_id, youtube_subscription_id, channel_name, channel_link, subscription_date, status)
@@ -492,7 +521,11 @@ def get_subscriptions_sorted_by_subscriber_count(conn):
             c.custom_url,
             c.published_at,
             c.thumbnail_url,
-            c.topic_ids
+            c.topic_ids,
+            c.content_type,
+            c.shorts_count,
+            c.longs_count,
+            c.shorts_percentage
         FROM subscriptions s
         LEFT JOIN channels c ON s.youtube_channel_id = c.youtube_channel_id
         WHERE s.status = 'SUBSCRIBED'
@@ -521,6 +554,10 @@ def get_subscriptions_sorted_by_subscriber_count(conn):
                 "published_at": row[13],
                 "thumbnail_url": row[14],
                 "topic_ids": row[15] or [],
+                "content_type": row[16] or "UNKNOWN",
+                "shorts_count": row[17] or 0,
+                "longs_count": row[18] or 0,
+                "shorts_percentage": float(row[19]) if row[19] is not None else 0.0,
             }
             subscriptions.append(subscription)
 
@@ -530,3 +567,160 @@ def get_subscriptions_sorted_by_subscriber_count(conn):
     except Exception as e:
         logger.error(f"Error getting subscriptions sorted by subscriber count: {e}")
         return []
+
+
+def save_content_analysis_result(conn, analysis_result):
+    """
+    Save content analysis result to the database.
+
+    Args:
+        conn: Database connection
+        analysis_result: ContentAnalysisResult object
+    """
+    if not conn or not analysis_result:
+        return False
+
+    try:
+        cursor = conn.cursor()
+
+        query = """
+        UPDATE channels 
+        SET 
+            content_type = %s,
+            shorts_count = %s,
+            longs_count = %s,
+            shorts_percentage = %s,
+            content_analysis_date = %s,
+            last_updated = CURRENT_TIMESTAMP
+        WHERE youtube_channel_id = %s
+        """
+
+        cursor.execute(
+            query,
+            (
+                analysis_result.content_type,
+                analysis_result.shorts_count,
+                analysis_result.longs_count,
+                analysis_result.shorts_percentage,
+                analysis_result.analysis_date,
+                analysis_result.channel_id,  # This is the youtube_channel_id
+            ),
+        )
+
+        conn.commit()
+        cursor.close()
+
+        logger.info(
+            f"Content analysis result saved for channel {analysis_result.channel_id}"
+        )
+        return True
+
+    except Exception as e:
+        logger.error(f"Error saving content analysis result: {e}")
+        return False
+
+
+def get_channels_needing_content_analysis(conn, limit=None):
+    """
+    Get channels that need content analysis (content_type = 'UNKNOWN').
+
+    Args:
+        conn: Database connection
+        limit: Maximum number of channels to return (optional)
+
+    Returns:
+        List of channel dictionaries
+    """
+    if not conn:
+        return []
+
+    try:
+        cursor = conn.cursor()
+
+        query = """
+        SELECT 
+            youtube_channel_id,
+            channel_title,
+            subscriber_count,
+            video_count
+        FROM channels 
+        WHERE content_type = 'UNKNOWN'
+        ORDER BY subscriber_count DESC NULLS LAST, channel_title ASC
+        """
+
+        if limit:
+            query += f" LIMIT {limit}"
+
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        channels = []
+        for row in rows:
+            channel = {
+                "youtube_channel_id": row[0],
+                "channel_title": row[1],
+                "subscriber_count": row[2] or 0,
+                "video_count": row[3] or 0,
+            }
+            channels.append(channel)
+
+        cursor.close()
+        return channels
+
+    except Exception as e:
+        logger.error(f"Error getting channels needing content analysis: {e}")
+        return []
+
+
+def get_content_analysis_stats(conn):
+    """
+    Get statistics about content analysis status.
+
+    Args:
+        conn: Database connection
+
+    Returns:
+        Dictionary with analysis statistics
+    """
+    if not conn:
+        return {}
+
+    try:
+        cursor = conn.cursor()
+
+        query = """
+        SELECT 
+            content_type,
+            COUNT(*) as count
+        FROM channels 
+        GROUP BY content_type
+        ORDER BY count DESC
+        """
+
+        cursor.execute(query)
+        rows = cursor.fetchall()
+
+        stats = {
+            "by_content_type": {},
+            "total_channels": 0,
+            "analyzed_channels": 0,
+            "unknown_channels": 0,
+        }
+
+        for row in rows:
+            content_type = row[0] or "UNKNOWN"
+            count = row[1]
+            stats["by_content_type"][content_type] = count
+            stats["total_channels"] += count
+
+            if content_type != "UNKNOWN":
+                stats["analyzed_channels"] += count
+            else:
+                stats["unknown_channels"] += count
+
+        cursor.close()
+        return stats
+
+    except Exception as e:
+        logger.error(f"Error getting content analysis stats: {e}")
+        return {}

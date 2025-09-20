@@ -11,9 +11,14 @@ CREATE TABLE subscriptions (
     youtube_subscription_id VARCHAR(255) NOT NULL UNIQUE,
     channel_name VARCHAR(255) NOT NULL,
     channel_link VARCHAR(255),
-    subscription_date TIMESTAMP WITH TIME ZONE,
-    status subscription_status NOT NULL DEFAULT 'SUBSCRIBED'
+    subscription_date TIMESTAMP
+    WITH
+        TIME ZONE,
+        status subscription_status NOT NULL DEFAULT 'SUBSCRIBED'
 );
+
+-- Create content type enum
+CREATE TYPE content_type AS ENUM ('SHORTS', 'LONGS', 'MIXED', 'UNKNOWN');
 
 -- Create channels table for additional metadata
 CREATE TABLE channels (
@@ -28,6 +33,11 @@ CREATE TABLE channels (
     published_at TIMESTAMP WITH TIME ZONE,
     thumbnail_url TEXT,
     topic_ids TEXT [], -- Array of topic IDs from YouTube
+    content_type content_type DEFAULT 'UNKNOWN',
+    shorts_count INTEGER DEFAULT 0,
+    longs_count INTEGER DEFAULT 0,
+    shorts_percentage DECIMAL(5,2) DEFAULT 0.0,
+    content_analysis_date TIMESTAMP WITH TIME ZONE,
     last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -65,6 +75,11 @@ SELECT
     c.published_at AS channel_published_at,
     c.thumbnail_url,
     c.topic_ids,
+    c.content_type,
+    c.shorts_count,
+    c.longs_count,
+    c.shorts_percentage,
+    c.content_analysis_date,
     c.last_updated AS channel_metadata_last_updated,
     c.created_at AS channel_metadata_created_at
 FROM subscriptions s
@@ -79,7 +94,8 @@ COMMENT ON COLUMN subscriptions.youtube_subscription_id IS 'The ID of the subscr
 
 COMMENT ON COLUMN subscriptions.status IS 'The current status of your subscription to this channel.';
 
-COMMENT ON TABLE channels IS 'Additional metadata for YouTube channels';
+COMMENT ON
+TABLE channels IS 'Additional metadata for YouTube channels';
 
 COMMENT ON COLUMN channels.youtube_channel_id IS 'The YouTube channel ID (primary key)';
 
@@ -92,6 +108,16 @@ COMMENT ON COLUMN channels.view_count IS 'Total number of views across all video
 COMMENT ON COLUMN channels.description IS 'Channel description text';
 
 COMMENT ON COLUMN channels.topic_ids IS 'Array of YouTube topic IDs associated with the channel';
+
+COMMENT ON COLUMN channels.content_type IS 'Primary content type: SHORTS, LONGS, MIXED, or UNKNOWN';
+
+COMMENT ON COLUMN channels.shorts_count IS 'Number of short-form videos (≤60s)';
+
+COMMENT ON COLUMN channels.longs_count IS 'Number of long-form videos (>60s)';
+
+COMMENT ON COLUMN channels.shorts_percentage IS 'Percentage of short-form content';
+
+COMMENT ON COLUMN channels.content_analysis_date IS 'When content analysis was last performed';
 
 COMMENT ON COLUMN channels.last_updated IS 'When this channel data was last fetched from YouTube API';
 
